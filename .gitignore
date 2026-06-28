@@ -1,0 +1,7 @@
+# Node bridge dependencies (run `npm install` in Server~/ after clone)
+Server~/node_modules/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log

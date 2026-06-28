@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "unity": {
+      "command": "node",
+      "args": ["./Packages/com.delta.unity-mcp/Server~/index.js"]
+    }
+  }
+}

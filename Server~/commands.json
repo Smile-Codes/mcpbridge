@@ -1,0 +1,137 @@
+{
+  "_note": "SINGLE SOURCE ของ Unity MCP commands — bridge (index.js) และ Unity C# (MCPHandlers.cs) อ่านไฟล์นี้ร่วมกัน. เพิ่ม/แก้ tool ที่นี่ที่เดียว. instance-management tools (unity_list_instances/select/start) เป็น local logic ไม่อยู่ในนี้ — hardcode ใน index.js.",
+  "commands": [
+    { "tool": "unity_ping", "command": "ping", "path": "/ping", "description": "Check Unity Editor connection (active/selected instance)", "params": {} },
+    { "tool": "unity_compile", "command": "compile", "path": "/compile", "description": "Trigger Unity AssetDatabase.Refresh + RequestScriptCompilation — use after writing new scripts so Unity detects and compiles them without manual interaction", "params": {} },
+    { "tool": "unity_compile_status", "command": "compile_status", "path": "/compile-status", "description": "Check if Unity is still compiling scripts. Returns {isCompiling, status}. Poll this after unity_compile until isCompiling=false before calling unity_add_component or any type-dependent command.", "params": {} },
+    { "tool": "unity_server_stop", "command": "server_stop", "path": "/server/stop", "description": "Stop the Unity MCP server (TcpListener) from the AI side — used by /unity-mcp-close to fully close MCP. The server stops after this response flushes, so a subsequent unity_ping failing means stop succeeded.", "params": {} },
+    { "tool": "unity_optimize_ui", "command": "optimize_ui", "path": "/ui/optimize", "description": "Optimize UI in the active scene: disable raycastTarget on non-interactive Image/Text, disable pixelPerfect on Canvas, warn about heavy LayoutGroups. Requires Write ON.", "params": {} },
+    { "tool": "unity_scene_list", "command": "scene_list", "path": "/scene/list", "description": "List all scenes in the project", "params": {} },
+    { "tool": "unity_scene_hierarchy", "command": "scene_hierarchy", "path": "/scene/hierarchy", "description": "Get current scene hierarchy", "params": {} },
+    { "tool": "unity_create_gameobject", "command": "create_gameobject", "path": "/gameobject/create", "description": "Create a GameObject in the active scene", "params": {
+      "name": { "type": "string", "desc": "GameObject name" },
+      "primitive": { "type": "enum", "values": ["cube","sphere","cylinder","plane","capsule","quad"], "opt": true, "desc": "Primitive type (optional)" },
+      "parent": { "type": "string", "opt": true, "desc": "Parent GameObject name (optional)" },
+      "x": { "type": "number", "opt": true, "default": 0, "desc": "Position X" },
+      "y": { "type": "number", "opt": true, "default": 0, "desc": "Position Y" },
+      "z": { "type": "number", "opt": true, "default": 0, "desc": "Position Z" }
+    } },
+    { "tool": "unity_delete_gameobject", "command": "delete_gameobject", "path": "/gameobject/delete", "description": "Delete a GameObject by name from the active scene", "params": {
+      "name": { "type": "string", "desc": "GameObject name to delete" }
+    } },
+    { "tool": "unity_create_prefab", "command": "create_prefab", "path": "/prefab/create", "description": "Create and save a Prefab asset to disk", "params": {
+      "name": { "type": "string", "desc": "Prefab name" },
+      "folder": { "type": "string", "opt": true, "default": "Assets/Prefabs", "desc": "Destination folder path" }
+    } },
+    { "tool": "unity_create_ui", "command": "create_ui", "path": "/ui/create", "description": "Create a UI element in the active scene (auto-creates Canvas if needed)", "params": {
+      "name": { "type": "string", "desc": "Element name" },
+      "type": { "type": "enum", "values": ["button","text","image","panel"], "desc": "UI element type" },
+      "text": { "type": "string", "opt": true, "desc": "Text content (for text/button)" },
+      "x": { "type": "number", "opt": true, "default": 0, "desc": "Anchored position X" },
+      "y": { "type": "number", "opt": true, "default": 0, "desc": "Anchored position Y" },
+      "width": { "type": "number", "opt": true, "default": 160, "desc": "Width" },
+      "height": { "type": "number", "opt": true, "default": 40, "desc": "Height" }
+    } },
+    { "tool": "unity_create_terrain", "command": "create_terrain", "path": "/terrain/create", "description": "Create a new Terrain in the scene, optionally generating hills with Perlin noise. For a flat floor use unity_create_gameobject with primitive 'plane'.", "params": {
+      "name": { "type": "string", "opt": true, "default": "Terrain", "desc": "Terrain name" },
+      "width": { "type": "number", "opt": true, "default": 500, "desc": "Width" },
+      "length": { "type": "number", "opt": true, "default": 500, "desc": "Length" },
+      "height": { "type": "number", "opt": true, "default": 100, "desc": "Max terrain height" },
+      "generate": { "type": "boolean", "opt": true, "default": false, "desc": "Generate Perlin-noise hills" },
+      "scale": { "type": "number", "opt": true, "default": 0.01, "desc": "Perlin noise scale" },
+      "amplitude": { "type": "number", "opt": true, "default": 0.3, "desc": "Height multiplier 0..1" }
+    } },
+    { "tool": "unity_terrain_set_heights", "command": "set_terrain_heights", "path": "/terrain/set-heights", "description": "Apply heightmap to Terrain in the active scene (use scale for Perlin noise, or provide raw heights array)", "params": {
+      "scale": { "type": "number", "opt": true, "default": 0.02, "desc": "Perlin noise scale (used when heights not provided)" },
+      "heights": { "type": "number[]", "opt": true, "desc": "Flat float array (sqrt(len) x sqrt(len)) of 0..1 height values" }
+    } },
+    { "tool": "unity_find_asset", "command": "find_asset", "path": "/asset/find", "description": "Search for assets in the project by name and/or type", "params": {
+      "name": { "type": "string", "desc": "Asset name or search term" },
+      "type": { "type": "string", "opt": true, "desc": "Asset type e.g. Prefab, Texture2D, Material, Scene" }
+    } },
+    { "tool": "unity_place_prefab", "command": "place_prefab", "path": "/prefab/place", "description": "Instantiate an existing prefab asset into the active scene by name", "params": {
+      "name": { "type": "string", "desc": "Prefab name to search for (e.g. P_HumanTrooperSword)" },
+      "x": { "type": "number", "opt": true, "default": 0, "desc": "World position X" },
+      "y": { "type": "number", "opt": true, "default": 0, "desc": "World position Y" },
+      "z": { "type": "number", "opt": true, "default": 0, "desc": "World position Z" }
+    } },
+    { "tool": "unity_create_material", "command": "create_material", "path": "/material/create", "description": "Create a Material asset (URP Lit by default) with optional hex color", "params": {
+      "name": { "type": "string", "desc": "Material name" },
+      "shader": { "type": "string", "opt": true, "desc": "Shader name, default 'Universal Render Pipeline/Lit'" },
+      "color": { "type": "string", "opt": true, "desc": "Hex color e.g. #FF0000" },
+      "folder": { "type": "string", "opt": true, "default": "Assets/Materials", "desc": "Destination folder" }
+    } },
+    { "tool": "unity_create_sprite_atlas", "command": "create_sprite_atlas", "path": "/atlas/create", "description": "Pack all sprites in a folder into a Sprite Atlas to reduce draw calls", "params": {
+      "name": { "type": "string", "desc": "Atlas name" },
+      "folder": { "type": "string", "desc": "Folder containing sprites to pack" }
+    } },
+    { "tool": "unity_audit_textures", "command": "audit_textures", "path": "/audit/textures", "description": "Report textures that should be optimized (oversized, uncompressed, read/write enabled)", "params": {} },
+    { "tool": "unity_audit_unused", "command": "audit_unused", "path": "/audit/unused", "description": "Report assets that may be unused (REPORT ONLY — does not delete; Addressables/Resources not detected)", "params": {} },
+    { "tool": "unity_audit_empty_folders", "command": "audit_empty_folders", "path": "/audit/empty-folders", "description": "Report empty folders under Assets/", "params": {} },
+    { "tool": "unity_count_components", "command": "count_components", "path": "/scene/count", "description": "Count objects with a component type, split into active vs inactive (inactive = pooled / SetActive false). Returns total, active, inactive, activeAndEnabled, and name lists.", "params": {
+      "type": { "type": "string", "desc": "Component type name, e.g. 'Fusion.NetworkObject' or 'Rigidbody'" }
+    } },
+    { "tool": "unity_read_console", "command": "read_console", "path": "/console/read", "description": "Read recent Unity Console entries (errors, warnings, logs) — use to debug compile/runtime errors", "params": {
+      "max": { "type": "number", "opt": true, "default": 30, "desc": "Max recent entries" }
+    } },
+    { "tool": "unity_inspect_object", "command": "inspect_object", "path": "/object/inspect", "description": "Read all components and their property values of a GameObject. Set deep=true for full reflection (private fields + all public properties, not just serialized ones).", "params": {
+      "name": { "type": "string", "desc": "GameObject name" },
+      "deep": { "type": "boolean", "opt": true, "default": false, "desc": "Use deep reflection (private fields + all public properties)" }
+    } },
+    { "tool": "unity_add_component", "command": "add_component", "path": "/object/add-component", "description": "Add a component/script to a GameObject", "params": {
+      "name": { "type": "string", "desc": "GameObject name" },
+      "component": { "type": "string", "desc": "Component type name, e.g. Rigidbody" }
+    } },
+    { "tool": "unity_set_property", "command": "set_property", "path": "/object/set-property", "description": "Set a serialized property value on a component (e.g. maxHp=100). Leave component empty for Transform.", "params": {
+      "name": { "type": "string", "desc": "GameObject name" },
+      "component": { "type": "string", "opt": true, "desc": "Component type name; empty = Transform" },
+      "property": { "type": "string", "desc": "Property name or display name" },
+      "value": { "type": "string", "desc": "Value as string (number/bool/text/enum, or 'x,y,z' for Vector3, '#RRGGBB' for Color)" }
+    } },
+    { "tool": "unity_set_transform", "command": "set_transform", "path": "/object/set-transform", "description": "Set position/rotation/scale of a GameObject. 'set' lists which to apply: pos, rot, scale", "params": {
+      "name": { "type": "string", "desc": "GameObject name" },
+      "set": { "type": "string", "desc": "Which to apply, e.g. 'pos,scale'" },
+      "px": { "type": "number", "opt": true, "default": 0 }, "py": { "type": "number", "opt": true, "default": 0 }, "pz": { "type": "number", "opt": true, "default": 0 },
+      "rx": { "type": "number", "opt": true, "default": 0 }, "ry": { "type": "number", "opt": true, "default": 0 }, "rz": { "type": "number", "opt": true, "default": 0 },
+      "sx": { "type": "number", "opt": true, "default": 1 }, "sy": { "type": "number", "opt": true, "default": 1 }, "sz": { "type": "number", "opt": true, "default": 1 }
+    } },
+    { "tool": "unity_get_selection", "command": "get_selection", "path": "/selection/get", "description": "Get currently selected GameObjects in the editor", "params": {} },
+    { "tool": "unity_set_selection", "command": "set_selection", "path": "/selection/set", "description": "Select a GameObject in the editor by name (and ping it)", "params": {
+      "name": { "type": "string", "desc": "GameObject name" }
+    } },
+    { "tool": "unity_open_scene", "command": "open_scene", "path": "/scene/open", "description": "Open a scene by asset path (prompts to save current changes)", "params": {
+      "path": { "type": "string", "desc": "e.g. Assets/Scenes/Main.unity" }
+    } },
+    { "tool": "unity_save_scene", "command": "save_scene", "path": "/scene/save", "description": "Save all open scenes", "params": {} },
+    { "tool": "unity_read_logfile", "command": "read_logfile", "path": "/console/logfile", "description": "Read the tail of the Unity Editor.log (full stack traces + Debug.Log history) — better than console for diagnosing hangs", "params": {
+      "max": { "type": "number", "opt": true, "default": 120, "desc": "Max recent lines" }
+    } },
+    { "tool": "unity_capture_state", "command": "capture_state", "path": "/diagnose/state", "description": "Capture a runtime snapshot (isPlaying, paused, timeScale, frameCount, fps, network, spikes) — use to diagnose why the game is stuck/frozen. Call twice to check if frameCount advances.", "params": {} },
+    { "tool": "unity_perf_audit", "command": "perf_audit", "path": "/perf/audit", "description": "Full performance audit: scene census (renderers, skinned meshes, particles, realtime lights, animators, mesh colliders), heavy object groups (e.g. trees x500, creeps x40), network ping/bandwidth/loss, heuristic warnings, and captured FPS spikes with their cause. Use to diagnose lag/FPS drops and recommend optimizations.", "params": {} },
+    { "tool": "unity_clear_console", "command": "clear_console", "path": "/console/clear", "description": "Clear the Unity console (use before reproducing a bug to isolate new errors)", "params": {} },
+    { "tool": "unity_play_control", "command": "play_control", "path": "/play/control", "description": "Control Play Mode to reproduce/observe bugs: enter, exit, pause, resume, step", "params": {
+      "action": { "type": "enum", "values": ["enter","exit","pause","resume","step"], "desc": "Play mode action" }
+    } },
+    { "tool": "unity_read_script", "command": "read_script", "path": "/script/read", "description": "Read a project script's source with line numbers (optionally just one method) — use to cite exact problem lines", "params": {
+      "name": { "type": "string", "desc": "Script name, e.g. FogofWars" },
+      "method": { "type": "string", "opt": true, "desc": "Only return this method's body, e.g. Update" }
+    } },
+    { "tool": "unity_deep_analysis", "command": "diagnose_deep", "path": "/diagnose/deep", "description": "Full profiler deep analysis: top GC allocators, CPU self-time per method, suspicious patterns (FindObjectOfType/Instantiate/LINQ in hot path), and actual source code of offenders with line numbers. Use after unity_perf_audit finds issues or when diagnosing stutters/lag spikes.", "params": {
+      "topN": { "type": "number", "opt": true, "default": 8, "desc": "Top N offenders to show per category" }
+    } },
+    { "tool": "unity_memory_snapshot", "command": "memory_snapshot", "path": "/diagnose/memory", "description": "Memory usage snapshot: Mono heap/used, Unity native alloc/reserved, graphics driver memory, and GC collection counts per generation. Use to detect memory leaks, excess allocations, or high graphics memory usage.", "params": {} },
+    { "tool": "unity_fusion_stats", "command": "fusion_stats", "path": "/diagnose/fusion", "description": "Detailed Photon Fusion 2 network stats: current tick, tick rate, simulation time, per-player RTT, in/out bandwidth (KB/s), packet loss, resend rate, resimulation count, snapshot delta size. Requires Play mode with a NetworkRunner in scene.", "params": {} },
+    { "tool": "unity_perf_worst", "command": "perf_worst", "path": "/perf/worst", "description": "Report the single worst FPS spike captured by the Auto Spike Monitor: frame time, GC culprit, CPU culprit, and actual source code of the offending method. Use after a stutter occurs in Play mode.", "params": {} },
+    { "tool": "unity_refactor_audit", "command": "refactor_audit", "path": "/code/refactor-audit", "description": "Scan all project .cs files and report refactoring opportunities: large classes, long/complex methods, high coupling (fan-in/fan-out), deep inheritance, public fields, magic numbers, and TODO debt. Returns top N offenders with severity scores and actionable issues.", "params": {
+      "topN": { "type": "number", "opt": true, "default": 10, "desc": "Top N files to report (default 10)" }
+    } },
+    { "tool": "unity_watch_add", "command": "watch_add", "path": "/watch/add", "description": "Add a runtime watch: sample a field/property on a component every 0.5s during Play Mode and track trend. Use to observe HP, ammo, state, or any runtime value over time.", "params": {
+      "objectName": { "type": "string", "desc": "GameObject name in scene (used in GameObject.Find)" },
+      "component": { "type": "string", "desc": "Component type name, e.g. PlayerController" },
+      "field": { "type": "string", "desc": "Field or property name, e.g. currentHp" }
+    } },
+    { "tool": "unity_watch_get", "command": "watch_get", "path": "/watch/get", "description": "Get the current sampled values and trend for all active runtime watches. Shows last 10 values per watch with timestamps.", "params": {} },
+    { "tool": "unity_watch_clear", "command": "watch_clear", "path": "/watch/clear", "description": "Remove all runtime watches", "params": {} },
+    { "tool": "unity_exceptions", "command": "get_exceptions", "path": "/diagnose/exceptions", "description": "Get recent Unity exceptions and errors (rolling buffer of last 50, deduplicated). Sorted by lastSeen desc. Use to quickly surface runtime exceptions without opening the Console window.", "params": {} }
+  ]
+}
