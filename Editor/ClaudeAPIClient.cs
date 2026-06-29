@@ -442,7 +442,9 @@ C. ตาราง markdown สรุป (ตำแหน่งตาม RESPONS
    เรียงแถวตาม impact มาก→น้อย.
 
 Play control (ให้คุณ reproduce bug เองได้):
-{""command"":""play_control"",""action"":""enter""}   // enter|exit|pause|resume|step
+{""command"":""play_control"",""action"":""enter""}   // enter|exit|pause|resume|step|timescale
+Slow-mo — ดูเหตุการณ์เร็วๆ (hit/knockback/spawn) แบบสโลว์ ระหว่าง watch เก็บค่าไปด้วย (กลับปกติ scale=1):
+{""command"":""play_control"",""action"":""timescale"",""scale"":0.2}
 Clear console (ล้างก่อน reproduce เพื่อแยก error ใหม่):
 {""command"":""clear_console""}
 
@@ -450,10 +452,25 @@ Read script source (มีเลขบรรทัด — ใส่ method เ�
 {""command"":""read_script"",""name"":""FogofWars"",""method"":""Update""}
 
 RuntimeWatch — ติดตาม field/property ของ GameObject ทุก 0.5s ระหว่าง Play Mode:
-{""command"":""watch_add"",""objectName"":""Player"",""component"":""PlayerController"",""field"":""currentHp""}
+{""command"":""watch_add"",""field"":""currentHp""}   ← ระบุแค่ field ก็พอ! component หาให้อัตโนมัติ, object = ตัวที่เลือกใน Hierarchy
+{""command"":""watch_add"",""objectName"":""Player"",""field"":""Damageable.Hp.Value""}   ← ระบุ object เอง + nested path ได้
+{""command"":""watch_add"",""objectName"":""Player"",""component"":""PlayerController"",""field"":""currentHp""}   ← ระบุครบก็ได้ (เจาะจงสุด)
 {""command"":""watch_get""}   ← ดูค่าปัจจุบัน + trend (↑/↓/=) + history 10 ค่าของทุก watch
 {""command"":""watch_clear""}  ← ลบ watch ทั้งหมด
+
+watch_alert — watch + เงื่อนไข แล้วเตือน (log warning + นับ) เมื่อเงื่อนไข ""กลายเป็นจริง"" — จับบั๊กที่เกิดแวบเดียว (ค่าติดลบ/เกิน cap/เปลี่ยนผิดจังหวะ):
+{""command"":""watch_alert"",""field"":""currentHp"",""op"":""lt"",""value"":0}   // op: lt|lte|gt|gte|eq|ne|changed (หรือ < <= > >= == != )
+watch_animator — ดู Animator สด: state ปัจจุบัน (clip+เวลา) หรือค่า parameter — จับ animation ค้าง/ไม่ทริกเกอร์:
+{""command"":""watch_animator"",""objectName"":""Player""}                 // ไม่ใส่ param = ดู state ปัจจุบัน
+{""command"":""watch_animator"",""objectName"":""Player"",""param"":""Speed""}  // ดูค่า parameter
+
 → ใช้ watch_add สำหรับ field ที่ไม่ serialize ได้ หรือต้องการดู real-time changes ระหว่างเล่น
+→ ผู้ใช้เปิดแผง 👁 Watch ในหน้าต่างเพื่อดูค่าสด/ลบทีละตัว/กด ＋ watch ตัวที่เลือกได้เองด้วย
+
+event_log — ดักเหตุการณ์ physics สด (collision/trigger) ของ object — จับ ""ทำไมไม่โดน/โดนซ้ำ/trigger ไม่ทำงาน"" (object ต้องมี Collider/Rigidbody):
+{""command"":""event_log"",""name"":""Player""}   // ไม่ใส่ name = ตัวที่เลือก · แปะ probe (ถอดเองตอนออก Play)
+{""command"":""event_log_get""}    ← ดูเหตุการณ์ล่าสุด (collisionEnter/Exit, triggerEnter/Exit + self/other)
+{""command"":""event_log_clear""}  ← ถอด probe + ล้าง buffer
 
 Get exceptions (exception/error buffer ล่าสุด 50 รายการ dedup อัตโนมัติ):
 {""command"":""get_exceptions""}

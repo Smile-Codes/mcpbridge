@@ -42,6 +42,9 @@ namespace MCPBridge
         double _lastLiveRepaint;
         double _lastThinkRepaint;   // throttle repaint ตอน "กำลังคิด" (กันแย่ง frame เกม)
         bool _showKeywords; // แผง Dev/Art keyword shortcuts
+        bool _showWatch;    // แผง 👁 Watch — ดูค่า field สดตอนเล่น
+        string _watchField = "";   // ช่องพิมพ์ field สำหรับ quick-add ใน Watch panel
+        double _lastWatchRepaint;
 
         // Tab ที่ 3 — MCP Log
         [SerializeField] int _activeTab;   // 0=API, 1=CLI, 2=MCPLog (แยกจาก backend)
@@ -75,6 +78,34 @@ namespace MCPBridge
                 return _uiFont;
             }
         }
+
+        // วาด sparkline (bar) จาก history ตัวเลข — โชว์ "รูปทรงการเปลี่ยน" ในแผง Watch
+        static void DrawSparkline(Rect r, string[] hist, Color col)
+        {
+            if (Event.current.type != EventType.Repaint || hist == null || hist.Length < 2) return;
+            var nums = new float[hist.Length];
+            float mn = float.MaxValue, mx = float.MinValue; int finite = 0;
+            for (int i = 0; i < hist.Length; i++)
+            {
+                if (float.TryParse(hist[i], out float f)) { nums[i] = f; mn = Mathf.Min(mn, f); mx = Mathf.Max(mx, f); finite++; }
+                else nums[i] = float.NaN;
+            }
+            if (finite < 2) return;   // ไม่ใช่ตัวเลข (เช่น state name) → ไม่วาด
+            float range = Mathf.Approximately(mx, mn) ? 1f : (mx - mn);
+            float bw = r.width / hist.Length;
+            var c = new Color(col.r, col.g, col.b, 0.55f);
+            for (int i = 0; i < hist.Length; i++)
+            {
+                if (float.IsNaN(nums[i])) continue;
+                float t = (nums[i] - mn) / range;            // 0..1
+                float h = Mathf.Max(2f, t * (r.height - 2f) + 1f);
+                EditorGUI.DrawRect(new Rect(r.x + i * bw, r.y + r.height - h, Mathf.Max(1.5f, bw - 1f), h), c);
+            }
+        }
+
+        // ตัดสตริงยาว + ใส่ … (ใช้ใน Watch panel กันแถวล้น)
+        static string Trunc(string s, int max) =>
+            string.IsNullOrEmpty(s) ? "" : (s.Length > max ? s.Substring(0, max) + "…" : s);
 
         // format เวลา: <60 วิ = "20s", >=60 = "1m 01s" (ไม่มีเศษ)
         static string FmtTime(double sec)
@@ -1124,6 +1155,7 @@ namespace MCPBridge
             if (_showScriptList || _showPrefabList || _showSkillList) reserved += SCRIPT_LIST_HEIGHT;
             if (_showLive) reserved += 44;
             if (_showKeywords) reserved += 92;
+            if (_showWatch) reserved += 64 + Mathf.Min(RuntimeWatch.Count, 8) * 19;
             float historyHeight = Mathf.Max(100, position.height - reserved);
 
             // ── smooth scroll: ดัก wheel เอง → ตั้ง target → lerp เข้าหา ──
@@ -1649,6 +1681,14 @@ namespace MCPBridge
             if (GUILayout.Button("🔑 Keys", kwStyle, GUILayout.Height(20), GUILayout.Width(60)))
                 _showKeywords = !_showKeywords;
 
+            // toggle Watch panel (ดูค่า field สดตอนเล่น)
+            var wStyle = new GUIStyle(small);
+            int wn = RuntimeWatch.Count;
+            if (_showWatch) wStyle.normal.textColor = ACCENT;
+            if (GUILayout.Button(new GUIContent(wn > 0 ? $"👁 Watch ({wn})" : "👁 Watch", "ดูค่า field/property สดตอน Play — เลือก object แล้วพิมพ์ field กด ＋"),
+                wStyle, GUILayout.Height(20), GUILayout.Width(wn > 0 ? 86 : 70)))
+                _showWatch = !_showWatch;
+
             // toggle Realtime Monitor (background — จับ memory สูง/ค้าง → log)
             var monStyle = new GUIStyle(small);
             if (RealtimeMonitor.IsOn) monStyle.normal.textColor = DANGER;
@@ -1714,6 +1754,116 @@ namespace MCPBridge
             EditorGUILayout.EndVertical();
         }
 
+        // ── 👁 Watch panel — ดูค่า field/property สดตอน Play + quick-add ตัวที่เลือก + ลบทีละตัว ──
+        void DrawWatchPanel()
+        {
+            if (!_showWatch) return;
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // quick-add: [ตัวที่เลือก] [field ____] [＋ Watch]
+            var sel = Selection.activeGameObject;
+            EditorGUILayout.BeginHorizontal();
+            var selSt = new GUIStyle(EditorStyles.miniLabel) { fontSize = FONT_SIZE - 2, alignment = TextAnchor.MiddleLeft };
+            selSt.normal.textColor = sel != null ? TEXT_WHITE : TEXT_HINT;
+            GUILayout.Label(new GUIContent(sel != null ? $"👁 {Trunc(sel.name, 16)}" : "👁 เลือก object",
+                sel != null ? sel.name : "เลือก GameObject ใน Hierarchy ก่อน"), selSt, GUILayout.Width(118));
+
+            GUI.SetNextControlName("watchField");
+            var fldSt = new GUIStyle(EditorStyles.textField) { fontSize = FONT_SIZE - 1 };
+            _watchField = EditorGUILayout.TextField(_watchField, fldSt);
+            bool addClick = GUILayout.Button(new GUIContent("＋ Watch", "เพิ่ม watch field ของตัวที่เลือก (component หาให้อัตโนมัติ)"),
+                EditorStyles.miniButton, GUILayout.Width(64));
+            EditorGUILayout.EndHorizontal();
+
+            // placeholder ในช่อง field ตอนว่าง
+            if (string.IsNullOrEmpty(_watchField) && Event.current.type == EventType.Repaint)
+            {
+                var ph = new GUIStyle(EditorStyles.miniLabel) { fontSize = FONT_SIZE - 2 };
+                ph.normal.textColor = TEXT_HINT;
+                var r = GUILayoutUtility.GetLastRect();
+                GUI.Label(new Rect(126, r.y + 1, 160, 16), "field เช่น currentHp", ph);
+            }
+
+            bool enterAdd = Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Return
+                            && GUI.GetNameOfFocusedControl() == "watchField";
+            if ((addClick || enterAdd) && !string.IsNullOrWhiteSpace(_watchField))
+            {
+                string err = RuntimeWatch.AddWatch(sel != null ? sel.name : "", "", _watchField.Trim());
+                if (err != null) ShowNotification(new GUIContent(err));
+                else { _watchField = ""; GUI.FocusControl(null); }
+                if (enterAdd) Event.current.Use();
+                Repaint();
+            }
+
+            // รายการ watch
+            var snap = RuntimeWatch.Snapshot();
+            var hintSt = new GUIStyle(EditorStyles.miniLabel) { fontSize = FONT_SIZE - 2, wordWrap = true };
+            hintSt.normal.textColor = TEXT_HINT;
+            if (snap.Count == 0)
+            {
+                GUILayout.Label("ยังไม่มี watch — พิมพ์ field แล้วกด ＋ หรือสั่ง AI ว่า \"watch currentHp\"", hintSt);
+            }
+            else
+            {
+                if (!Application.isPlaying)
+                    GUILayout.Label("กด Play เพื่อเริ่มเก็บค่า (sample ทุก 0.5s)", hintSt);
+
+                foreach (var v in snap)
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    var keySt = new GUIStyle(EditorStyles.label) { fontSize = FONT_SIZE - 1 };
+                    keySt.normal.textColor = TEXT_MUTE;
+                    GUILayout.Label(new GUIContent($"{Trunc(v.objectName, 12)}·{v.field}", $"{v.objectName}.{v.component}.{v.field}"),
+                        keySt, GUILayout.Width(140));
+
+                    Color tc = v.status == "error" ? DANGER
+                             : v.trend == "↑" ? ONLINE
+                             : v.trend == "↓" ? WARN
+                             : v.trend == "changed" ? ACCENT : TEXT_WHITE;
+                    var valSt = new GUIStyle(EditorStyles.label) { fontSize = FONT_SIZE - 1 };
+                    valSt.normal.textColor = tc;
+                    string arrow = v.trend == "=" ? "" : v.trend + " ";
+                    GUILayout.Label($"{arrow}{Trunc(v.value, 18)}", valSt);
+
+                    GUILayout.FlexibleSpace();
+
+                    // 🔔 alert badge (ถ้าตั้งเงื่อนไขไว้)
+                    if (!string.IsNullOrEmpty(v.alert))
+                    {
+                        var alSt = new GUIStyle(EditorStyles.miniLabel) { fontSize = FONT_SIZE - 2 };
+                        alSt.normal.textColor = v.alertCount > 0 ? DANGER : TEXT_HINT;
+                        GUILayout.Label(new GUIContent(v.alertCount > 0 ? $"🔔{v.alertCount}" : "🔔",
+                            $"alert {v.alert} — ทริกไป {v.alertCount} ครั้ง"), alSt, GUILayout.Width(v.alertCount > 0 ? 30 : 18));
+                    }
+
+                    // sparkline ของ history (เฉพาะค่าตัวเลข)
+                    var spark = GUILayoutUtility.GetRect(50f, 16f);
+                    DrawSparkline(spark, v.history, tc);
+
+                    var xSt = new GUIStyle(EditorStyles.miniButton) { fontSize = FONT_SIZE - 2 };
+                    if (GUILayout.Button(new GUIContent("✕", "ลบ watch นี้"), xSt, GUILayout.Width(22), GUILayout.Height(17)))
+                    { RuntimeWatch.RemoveWatch(v.key); Repaint(); }
+                    EditorGUILayout.EndHorizontal();
+                }
+
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.FlexibleSpace();
+                var clrSt = new GUIStyle(EditorStyles.miniButton) { fontSize = FONT_SIZE - 2 };
+                clrSt.normal.textColor = TEXT_MUTE;
+                if (GUILayout.Button("Clear all", clrSt, GUILayout.Width(64)))
+                { RuntimeWatch.ClearAll(); Repaint(); }
+                EditorGUILayout.EndHorizontal();
+            }
+
+            // live repaint ตอน Play (0.5s) — ค่าขยับเอง ไม่ต้องกด
+            if (Application.isPlaying)
+            {
+                double now = EditorApplication.timeSinceStartup;
+                if (now - _lastWatchRepaint > 0.5) { _lastWatchRepaint = now; Repaint(); }
+            }
+            EditorGUILayout.EndVertical();
+        }
+
         // ══════════════════════════════════════════════════════════════════════
         //  KEYWORD REGISTRY — แหล่งความจริงเดียว (chip ที่แสดง + auto-gather + tooltip)
         //  เพิ่ม keyword ใหม่ = เพิ่ม 1 บรรทัดที่นี่ที่เดียว
@@ -1746,7 +1896,7 @@ namespace MCPBridge
             new Kw("refactor",   KwG.Dev,  null,                   "สแกน script ที่ควร refactor (AI สั่งเอง — สแกนหนัก)"),
             new Kw("code",       KwG.Dev,  null,                   "วิเคราะห์โค้ด (ใช้คู่กับ @script)"),
             new Kw("script",     KwG.Dev,  null,                   "อ่าน source: script <ชื่อ>"),
-            new Kw("watch",      KwG.Dev,  null,                   "ดูค่า field สดตอนเล่น (Play): watch <obj> <component> <field> · ดูค่า=wv · ล้าง=watchclear"),
+            new Kw("watch",      KwG.Dev,  null,                   "ดูค่า field สดตอนเล่น: watch <field> (เลือก object ไว้ก็พอ) · เปิดแผง 👁 Watch ดูสด/ลบได้ · ดูค่า=wv · ล้าง=watchclear"),
             // 🎨 ART
             new Kw("draw",       KwG.Art,  "/perf/audit",          "draw calls + SetPass + batching"),
             new Kw("batches",    KwG.Art,  "/perf/audit",          "batch count"),
@@ -1902,6 +2052,7 @@ namespace MCPBridge
             DrawAttachToolbar();
             DrawLivePanel();
             DrawKeywordPanel();
+            DrawWatchPanel();
 
             // ── autocomplete picker (@/#//) — แสดง "เหนือ" ช่องพิมพ์ (เดิมอยู่ใต้ ชิดขอบจอ มองยาก) ──
             if (_showScriptList)      DrawScriptList();

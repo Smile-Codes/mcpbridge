@@ -83,6 +83,9 @@ namespace MCPBridge
                 { "clear_console", "/console/clear" },          { "play_control", "/play/control" },
                 { "read_script", "/script/read" },              { "watch_add", "/watch/add" },
                 { "watch_get", "/watch/get" },                  { "watch_clear", "/watch/clear" },
+                { "watch_alert", "/watch/alert" },              { "watch_animator", "/watch/animator" },
+                { "event_log", "/event/log" },                  { "event_log_get", "/event/log-get" },
+                { "event_log_clear", "/event/log-clear" },
                 { "get_exceptions", "/diagnose/exceptions" },   { "clear_exceptions", "/diagnose/exceptions-clear" },
                 { "diagnose_exceptions", "/diagnose/exceptions" },
                 { "compile", "/compile" },                      { "compile_status", "/compile-status" },
@@ -297,7 +300,12 @@ namespace MCPBridge
                 "/diagnose/fusion"  => FusionStats(),
                 "/diagnose/exceptions" => ExecuteOnMainThread(() => ExceptionTracker.GetReport()),
                 "/diagnose/exceptions-clear" => ExecuteOnMainThread(() => { ExceptionTracker.Clear(); return "{\"cleared\":true}"; }),
-                "/watch/add"   => WatchAdd(body),
+                "/watch/add"     => WatchAdd(body),
+                "/watch/alert"   => WatchAlert(body),
+                "/watch/animator"=> WatchAnimator(body),
+                "/event/log"     => EventLogAttach(body),
+                "/event/log-get" => ExecuteOnMainThread(() => EventLog.GetReport()),
+                "/event/log-clear" => ExecuteOnMainThread(() => { EventLog.Clear(); return "{\"cleared\":true}"; }),
                 "/watch/get"   => ExecuteOnMainThread(() => RuntimeWatch.GetReport()),
                 "/watch/clear" => ExecuteOnMainThread(() => { RuntimeWatch.ClearAll(); return "{\"cleared\":true}"; }),
                 "/code/refactor-audit" => RefactorAuditCmd(body),
@@ -1066,6 +1074,49 @@ public class {className} : MonoBehaviour
             });
         }
 
+        // ── watch_alert — watch + เงื่อนไข + เตือน (log warning) ──────────────
+        static string WatchAlert(string body)
+        {
+            var data = ParseReq<WatchAlertRequest>(body);
+            return ExecuteOnMainThread(() =>
+            {
+                if (string.IsNullOrEmpty(data.op))
+                    return "{\"error\":\"op required (lt|lte|gt|gte|eq|ne|changed)\"}";
+                string err = RuntimeWatch.AddAlert(data.objectName, data.component, data.field, data.op, data.value);
+                if (err != null) return $"{{\"error\":\"{EscapeJson(err)}\"}}";
+                return $"{{\"alertSet\":\"{EscapeJson(data.field)} {EscapeJson(data.op)} {data.value}\"," +
+                       "\"note\":\"จะ log warning + นับเมื่อเงื่อนไขกลายเป็นจริงตอน Play — ดูผลผ่าน watch_get หรือแผง 👁 Watch\"}";
+            });
+        }
+
+        // ── event_log — แปะ probe ดัก collision/trigger ของ object ที่เลือก ──
+        static string EventLogAttach(string body)
+        {
+            var data = ParseReq<NameRequest>(body);
+            return ExecuteOnMainThread(() =>
+            {
+                string err = EventLog.Attach(data.name);
+                if (err != null) return $"{{\"error\":\"{EscapeJson(err)}\"}}";
+                return $"{{\"probing\":{EventLog.ProbeCount}," +
+                       "\"note\":\"ดัก OnCollision/OnTrigger ตอน Play (object ต้องมี Collider/Rigidbody) — ดูผล event_log_get, ล้าง event_log_clear, ถอดเองตอนออก Play\"}";
+            });
+        }
+
+        // ── watch_animator — ดู Animator state/parameter สด ──────────────────
+        // เพิ่ม watch แบบพิเศษ: field "@state" (state ปัจจุบัน) หรือ "@param:Name"
+        static string WatchAnimator(string body)
+        {
+            var data = ParseReq<WatchAnimatorRequest>(body);
+            return ExecuteOnMainThread(() =>
+            {
+                string field = string.IsNullOrEmpty(data.param) ? "@state" : "@param:" + data.param;
+                string err = RuntimeWatch.AddWatch(data.objectName, "Animator", field);
+                if (err != null) return $"{{\"error\":\"{EscapeJson(err)}\"}}";
+                return $"{{\"watchingAnimator\":\"{EscapeJson(field)}\"," +
+                       "\"note\":\"ดูค่าสดผ่าน watch_get หรือแผง 👁 Watch — @state=state ปัจจุบัน, @param:Name=ค่า parameter\"}";
+            });
+        }
+
         // ── Refactor Audit — สแกน .cs ทุกไฟล์ รายงาน refactoring opportunities ──
         static string RefactorAuditCmd(string body)
         {
@@ -1224,6 +1275,8 @@ public class {className} : MonoBehaviour
         [Serializable] class CountRequest        { public string type; }
         [Serializable] class HotReloadRequest    { public string action; }
         [Serializable] class WatchAddRequest     { public string objectName; public string component; public string field; }
+        [Serializable] class WatchAlertRequest   { public string objectName; public string component; public string field; public string op; public float value; }
+        [Serializable] class WatchAnimatorRequest{ public string objectName; public string param; }
         [Serializable] class RunCsharpRequest    { public string code; }
     }
 }

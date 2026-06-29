@@ -671,11 +671,16 @@ namespace MCPBridge
                 switch ((data.action ?? "").ToLower())
                 {
                     case "enter": EditorApplication.isPlaying = true;  return "{\"play\":\"entering\"}";
-                    case "exit":  EditorApplication.isPlaying = false; return "{\"play\":\"exiting\"}";
+                    case "exit":  EditorApplication.isPlaying = false; Time.timeScale = 1f; return "{\"play\":\"exiting\"}";
                     case "pause": EditorApplication.isPaused = true;   return "{\"play\":\"paused\"}";
                     case "resume":EditorApplication.isPaused = false;  return "{\"play\":\"resumed\"}";
                     case "step":  EditorApplication.Step();            return "{\"play\":\"stepped\"}";
-                    default: return "{\"error\":\"action must be enter|exit|pause|resume|step\"}";
+                    // slow-mo/เร่ง — ดูเหตุการณ์เร็วๆ (hit/knockback/spawn) แบบสโลว์ขณะ Watcher เก็บค่าไปด้วย
+                    case "timescale": case "slowmo":
+                        float sc = data.scale > 0 ? Mathf.Clamp(data.scale, 0.01f, 100f) : 0.2f;
+                        Time.timeScale = sc;
+                        return $"{{\"play\":\"timescale\",\"timeScale\":{sc}}}";
+                    default: return "{\"error\":\"action must be enter|exit|pause|resume|step|timescale\"}";
                 }
             });
         }
@@ -869,7 +874,7 @@ namespace MCPBridge
 
         // ── Request models ────────────────────────────────────────────────────
         [Serializable] class ConsoleRequest      { public int max; }
-        [Serializable] class PlayRequest         { public string action; }
+        [Serializable] class PlayRequest         { public string action; public float scale; }
         [Serializable] class ReadScriptRequest   { public string name; public string method; }
         [Serializable] class ComponentRequest    { public string name; public string component; }
         [Serializable] class SetPropertyRequest  { public string name; public string component; public string property; public string value; }

@@ -4,7 +4,33 @@ All notable changes to this package are documented here.
 
 ## [Unreleased]
 
+### Added
+- **Runtime-inspection tools (Play Mode companions to RuntimeWatch).**
+  - `watch_alert` (`/watch/alert`) — a watch with a condition (`lt`/`lte`/`gt`/`gte`/`eq`/`ne` against a
+    value, or `changed`); on the rising edge it logs a warning and bumps a counter (surfaced in
+    `watch_get` and the panel as 🔔). Catches glitches that flash by — value goes negative, exceeds a
+    cap, changes unexpectedly.
+  - `watch_animator` (`/watch/animator`) — watch an Animator's current state (clip + normalized time,
+    flags transitions) or a parameter value live, via special `@state` / `@param:Name` watch fields.
+  - `event_log` / `event_log_get` / `event_log_clear` (`/event/log*`) — attach a temporary probe
+    (`MCPEventProbe`) to a GameObject to log its `OnCollision`/`OnTrigger` events during Play; probes
+    auto-detach on Stop. Debug "why didn't it hit / hit twice / trigger never fired".
+  - `play_control` gained a `timescale` action (slow-mo) — set `Time.timeScale` (e.g. 0.2) to watch
+    fast events in slow motion while watches keep sampling; `exit` restores normal speed.
+  - The 👁 Watch panel now draws a mini **sparkline** of each numeric watch's history and a 🔔 alert
+    badge with trigger count.
+
 ### Changed
+- **RuntimeWatch is much easier to use.**
+  - `watch_add` now only requires `field`. The `component` is auto-detected (the component holding
+    that field, game scripts preferred over `UnityEngine.*`), and `objectName` defaults to the
+    GameObject selected in the Hierarchy. Explicit values still work for precision; nested paths like
+    `Damageable.Hp.Value` are supported.
+  - New **👁 Watch panel** in the chat window (toolbar toggle): live values + trend (↑/↓/=) that
+    refresh while playing, a per-row ✕ to remove, a quick-add field for the selected object, and
+    clear-all — no need to type `watch_get`. Backed by new `RuntimeWatch.Snapshot()` /
+    `RemoveWatch(key)` / `Count` APIs.
+
 - **Chat window reskin — "Midnight Indigo" theme.** Replaced the warm clay/brown palette with a
   cool charcoal base (`#0F1117`), higher-contrast near-white text (`#EEF0F4`), and an indigo-violet
   accent (`#7C6CFF`) for a modern, more readable, AI-app look. Centralized the palette (added

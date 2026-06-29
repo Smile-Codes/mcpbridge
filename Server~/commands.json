@@ -109,8 +109,9 @@
     { "tool": "unity_capture_state", "command": "capture_state", "path": "/diagnose/state", "description": "Capture a runtime snapshot (isPlaying, paused, timeScale, frameCount, fps, network, spikes) — use to diagnose why the game is stuck/frozen. Call twice to check if frameCount advances.", "params": {} },
     { "tool": "unity_perf_audit", "command": "perf_audit", "path": "/perf/audit", "description": "Full performance audit: scene census (renderers, skinned meshes, particles, realtime lights, animators, mesh colliders), heavy object groups (e.g. trees x500, creeps x40), network ping/bandwidth/loss, heuristic warnings, and captured FPS spikes with their cause. Use to diagnose lag/FPS drops and recommend optimizations.", "params": {} },
     { "tool": "unity_clear_console", "command": "clear_console", "path": "/console/clear", "description": "Clear the Unity console (use before reproducing a bug to isolate new errors)", "params": {} },
-    { "tool": "unity_play_control", "command": "play_control", "path": "/play/control", "description": "Control Play Mode to reproduce/observe bugs: enter, exit, pause, resume, step", "params": {
-      "action": { "type": "enum", "values": ["enter","exit","pause","resume","step"], "desc": "Play mode action" }
+    { "tool": "unity_play_control", "command": "play_control", "path": "/play/control", "description": "Control Play Mode to reproduce/observe bugs: enter, exit, pause, resume, step, or timescale (slow-mo). Use timescale with scale=0.1-0.25 to watch fast events (hit/knockback/spawn) in slow motion while watches keep sampling; resume normal speed with scale=1 (exit also restores it).", "params": {
+      "action": { "type": "enum", "values": ["enter","exit","pause","resume","step","timescale"], "desc": "Play mode action" },
+      "scale": { "type": "number", "opt": true, "default": 0.2, "desc": "For action=timescale: Time.timeScale (0.01-100; <1 = slow-mo, 1 = normal)" }
     } },
     { "tool": "unity_read_script", "command": "read_script", "path": "/script/read", "description": "Read a project script's source with line numbers (optionally just one method) — use to cite exact problem lines", "params": {
       "name": { "type": "string", "desc": "Script name, e.g. FogofWars" },
@@ -125,13 +126,29 @@
     { "tool": "unity_refactor_audit", "command": "refactor_audit", "path": "/code/refactor-audit", "description": "Scan all project .cs files and report refactoring opportunities: large classes, long/complex methods, high coupling (fan-in/fan-out), deep inheritance, public fields, magic numbers, and TODO debt. Returns top N offenders with severity scores and actionable issues.", "params": {
       "topN": { "type": "number", "opt": true, "default": 10, "desc": "Top N files to report (default 10)" }
     } },
-    { "tool": "unity_watch_add", "command": "watch_add", "path": "/watch/add", "description": "Add a runtime watch: sample a field/property on a component every 0.5s during Play Mode and track trend. Use to observe HP, ammo, state, or any runtime value over time.", "params": {
-      "objectName": { "type": "string", "desc": "GameObject name in scene (used in GameObject.Find)" },
-      "component": { "type": "string", "desc": "Component type name, e.g. PlayerController" },
-      "field": { "type": "string", "desc": "Field or property name, e.g. currentHp" }
+    { "tool": "unity_watch_add", "command": "watch_add", "path": "/watch/add", "description": "Add a runtime watch: sample a field/property every 0.5s during Play Mode and track its trend (↑/↓/=). Use to observe HP, ammo, state, or any runtime value over time. Only 'field' is required — component is auto-detected (the component holding that field, game scripts preferred), and objectName defaults to the selected GameObject. Supports nested paths like Damageable.Hp.Value.", "params": {
+      "field": { "type": "string", "desc": "Field or property to watch, e.g. currentHp or Damageable.Hp.Value" },
+      "objectName": { "type": "string", "opt": true, "desc": "GameObject name (fuzzy/Clone-aware); omit to use the selected object in Hierarchy" },
+      "component": { "type": "string", "opt": true, "desc": "Component type name, e.g. PlayerController; omit to auto-detect which component has the field" }
     } },
     { "tool": "unity_watch_get", "command": "watch_get", "path": "/watch/get", "description": "Get the current sampled values and trend for all active runtime watches. Shows last 10 values per watch with timestamps.", "params": {} },
     { "tool": "unity_watch_clear", "command": "watch_clear", "path": "/watch/clear", "description": "Remove all runtime watches", "params": {} },
+    { "tool": "unity_watch_alert", "command": "watch_alert", "path": "/watch/alert", "description": "Watch a field AND alert on a condition: each 0.5s sample, when the condition becomes true (rising edge) it logs a warning and increments a counter (surfaced in watch_get / the 👁 Watch panel). Great for catching glitches that flash by — value goes negative, exceeds a cap, or changes unexpectedly. Same auto-detection as watch_add (field-only is fine).", "params": {
+      "field": { "type": "string", "desc": "Field/property to watch, e.g. currentHp" },
+      "op": { "type": "string", "desc": "Condition: lt | lte | gt | gte | eq | ne (compare to value) or 'changed' (any change). Symbols < <= > >= == != also accepted." },
+      "value": { "type": "number", "opt": true, "default": 0, "desc": "Threshold to compare against (ignored for 'changed')" },
+      "objectName": { "type": "string", "opt": true, "desc": "GameObject name; omit to use the selected object" },
+      "component": { "type": "string", "opt": true, "desc": "Component type; omit to auto-detect" }
+    } },
+    { "tool": "unity_watch_animator", "command": "watch_animator", "path": "/watch/animator", "description": "Watch an Animator live during Play: the current state (clip + normalized time, flags transitions) or a parameter value. Use to debug stuck/untriggered animations that ordinary field watches can't reach. Shows up in watch_get and the 👁 Watch panel.", "params": {
+      "objectName": { "type": "string", "opt": true, "desc": "GameObject with the Animator; omit to use the selected object" },
+      "param": { "type": "string", "opt": true, "desc": "Animator parameter name to watch (Float/Int/Bool/Trigger); omit to watch the current state instead" }
+    } },
+    { "tool": "unity_event_log", "command": "event_log", "path": "/event/log", "description": "Attach a temporary probe to a GameObject (selected if omitted) that logs its physics events live during Play — OnCollisionEnter/Exit and OnTriggerEnter/Exit. Use to debug 'why didn't it hit / hit twice / trigger never fired'. The object needs a Collider (+ Rigidbody for collisions; isTrigger for triggers). Probes auto-detach on Stop. Read results with unity_event_log_get.", "params": {
+      "name": { "type": "string", "opt": true, "desc": "GameObject name to probe; omit to use the selected object" }
+    } },
+    { "tool": "unity_event_log_get", "command": "event_log_get", "path": "/event/log-get", "description": "Get the recent physics events captured by event_log probes (newest first): time, kind (collisionEnter/Exit, triggerEnter/Exit), self, other.", "params": {} },
+    { "tool": "unity_event_log_clear", "command": "event_log_clear", "path": "/event/log-clear", "description": "Detach all event_log probes and clear the captured event buffer.", "params": {} },
     { "tool": "unity_exceptions", "command": "get_exceptions", "path": "/diagnose/exceptions", "description": "Get recent Unity exceptions and errors (rolling buffer of last 50, deduplicated). Sorted by lastSeen desc. Use to quickly surface runtime exceptions without opening the Console window.", "params": {} },
     { "tool": "unity_run_csharp", "command": "run_csharp", "path": "/code/run", "timeoutMs": 60000, "noRetry": true, "description": "Escape hatch — compile and run arbitrary C# against the live Editor/scene via Roslyn. Use ONLY when no dedicated tool fits: build prefabs from imported models, batch-edit assets, drive the AssetDatabase/importer, or prototype gameplay live. Provide a FULL C# source file in 'code'. Put logic in 'public static string Run()' (its return string is reported back), or define a MonoBehaviour (auto-attached to a new GameObject in the playing scene). All loaded assemblies (UnityEngine, UnityEditor, game asm) are referenced automatically. Requires Write ON. Make scripts idempotent — there is no retry, but rerunning should be safe.", "params": {
       "code": { "type": "string", "desc": "Full C# source. Logic in 'public static string Run()' (return value reported) or a MonoBehaviour (auto-attached live)." }

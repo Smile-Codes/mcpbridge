@@ -17,12 +17,32 @@ namespace MCPBridge
         class WatchEntry
         {
             public string objectName;
-            public string componentType;
+            public string componentType;       // ว่าง = auto (หา component ที่มี field นั้นเอง)
             public string fieldName;
+            public string resolvedComponent;   // component จริงที่ auto เจอ (โชว์ใน UI/report)
             public readonly List<string> history = new List<string>();   // last 10 values
             public readonly List<string> timestamps = new List<string>();
             public bool everFound;     // เคย resolve object เจอมั้ย (กันลบ watch ที่ชื่อพิมพ์ผิดตั้งแต่แรก)
             public int missStreak;     // หาย (not found) ติดกันกี่ครั้ง → ใช้ auto-clear ตอน despawn
+
+            // ── alert (watch_alert) ── ว่าง = ไม่มี alert
+            public string alertOp;        // lt|lte|gt|gte|eq|ne|changed
+            public double alertThreshold;
+            public int alertCount;        // จำนวนครั้งที่เงื่อนไข "กลายเป็นจริง" (rising edge)
+            public bool alertWasTrue;     // สถานะรอบก่อน (จับ edge ไม่ให้สแปมทุก sample)
+
+            public string Key => $"{objectName}.{componentType}.{fieldName}";
+            public string ShowComponent => string.IsNullOrEmpty(componentType)
+                ? (string.IsNullOrEmpty(resolvedComponent) ? "auto" : resolvedComponent) : componentType;
+        }
+
+        /// <summary>snapshot 1 แถวสำหรับ UI panel (ค่าปัจจุบัน + trend)</summary>
+        public struct WatchView
+        {
+            public string key, objectName, component, field, value, trend, status;
+            public string[] history;     // ค่า history (ให้ panel วาด sparkline)
+            public string alert;         // คำอธิบายเงื่อนไข alert ("" = ไม่มี) เช่น "< 0"
+            public int alertCount;       // ทริกไปกี่ครั้ง (panel โชว์ 🔔)
         }
 
         static readonly List<WatchEntry> _watches = new List<WatchEntry>();
@@ -87,6 +107,18 @@ namespace MCPBridge
                     w.history.Add(val);
                     w.timestamps.Add(ts);
                     if (w.history.Count > MAX_HISTORY) { w.history.RemoveAt(0); w.timestamps.RemoveAt(0); }
+
+                    // alert: เงื่อนไขกลายเป็นจริง (rising edge) → นับ + log warning (ไม่สแปมทุก sample)
+                    if (!string.IsNullOrEmpty(w.alertOp))
+                    {
+                        bool hit = EvalAlert(w, val);
+                        if (hit && !w.alertWasTrue)
+                        {
+                            w.alertCount++;
+                            Debug.LogWarning($"[Watch alert] {w.Key} {AlertText(w)} → {val} (ครั้งที่ {w.alertCount})");
+                        }
+                        w.alertWasTrue = hit;
+                    }
                 }
                 if (despawned != null) foreach (var w in despawned) _watches.Remove(w);
             }
@@ -99,25 +131,86 @@ namespace MCPBridge
                 var go = ResolveObject(w.objectName);
                 if (go == null) return NOT_FOUND;
 
-                Component comp = null;
-                foreach (var c in go.GetComponents<Component>())
+                // ── component ที่ระบุชื่อมา ──
+                if (!string.IsNullOrEmpty(w.componentType))
                 {
-                    if (c == null) continue;
-                    if (c.GetType().Name == w.componentType || c.GetType().FullName == w.componentType)
-                    { comp = c; break; }
+                    Component comp = null;
+                    foreach (var c in go.GetComponents<Component>())
+                    {
+                        if (c == null) continue;
+                        if (c.GetType().Name == w.componentType || c.GetType().FullName == w.componentType)
+                        { comp = c; break; }
+                    }
+                    if (comp == null) return "(component not found)";
+                    if (w.fieldName.StartsWith("@"))   // ดู Animator state/param (watch_animator)
+                        return SampleAnimator(comp as Animator, w.fieldName);
+                    return TryResolvePath(comp, w.fieldName, out object v) ? FormatValue(v) : $"(field not found: {w.fieldName})";
                 }
-                if (comp == null) return "(component not found)";
 
-                // รองรับ nested path "a.b.c" — เดินไล่ field/property ทีละชั้น (เช่น Damageable.Hp.Value)
-                object cur = comp;
-                foreach (var seg in w.fieldName.Split('.'))
-                {
-                    if (cur == null) return "null";
-                    if (!TryGetMember(cur, seg, out cur)) return $"(not found: {seg})";
-                }
-                return FormatValue(cur);
+                // ── auto: หา component ที่มี field นี้เอง (สคริปต์เกมก่อน UnityEngine) ──
+                var comps = go.GetComponents<Component>();
+                for (int pass = 0; pass < 2; pass++)
+                    foreach (var c in comps)
+                    {
+                        if (c == null) continue;
+                        bool isUnity = (c.GetType().Namespace ?? "").StartsWith("UnityEngine");
+                        if (pass == 0 ? isUnity : !isUnity) continue;   // pass0 = game scripts, pass1 = unity
+                        if (TryResolvePath(c, w.fieldName, out object v))
+                        {
+                            w.resolvedComponent = c.GetType().Name;   // จำไว้โชว์ใน UI
+                            return FormatValue(v);
+                        }
+                    }
+                return $"(field not found: {w.fieldName})";
             }
             catch (Exception e) { return $"(error: {e.Message})"; }
+        }
+
+        // ดู Animator: "@state" = clip+normalizedTime ปัจจุบัน · "@param:Name" = ค่า parameter
+        static string SampleAnimator(Animator anim, string field)
+        {
+            if (anim == null) return "(not an Animator)";
+            if (anim.runtimeAnimatorController == null) return "(no controller)";
+
+            if (field == "@state")
+            {
+                var st = anim.GetCurrentAnimatorStateInfo(0);
+                var ci = anim.GetCurrentAnimatorClipInfo(0);
+                string clip = ci.Length > 0 && ci[0].clip != null ? ci[0].clip.name : "state#" + st.shortNameHash;
+                string suffix = anim.IsInTransition(0) ? " →(transition)" : "";
+                return $"{clip} t={st.normalizedTime % 1f:0.00}{suffix}";
+            }
+
+            if (field.StartsWith("@param:"))
+            {
+                string pname = field.Substring("@param:".Length);
+                foreach (var p in anim.parameters)
+                {
+                    if (p.name != pname) continue;
+                    switch (p.type)
+                    {
+                        case AnimatorControllerParameterType.Float:   return anim.GetFloat(pname).ToString("0.###");
+                        case AnimatorControllerParameterType.Int:     return anim.GetInteger(pname).ToString();
+                        case AnimatorControllerParameterType.Bool:    return anim.GetBool(pname).ToString().ToLower();
+                        case AnimatorControllerParameterType.Trigger: return anim.GetBool(pname) ? "set" : "-";
+                    }
+                }
+                return $"(no param: {pname})";
+            }
+            return "(use @state or @param:Name)";
+        }
+
+        // เดิน nested path "a.b.c" — true ถ้าทุก segment มีจริง (val อาจเป็น null ได้)
+        static bool TryResolvePath(object root, string path, out object val)
+        {
+            object cur = root;
+            foreach (var seg in path.Split('.'))
+            {
+                if (cur == null) { val = null; return true; }   // null กลางทาง = ค่าจริงคือ null
+                if (!TryGetMember(cur, seg, out cur)) { val = null; return false; }
+            }
+            val = cur;
+            return true;
         }
 
         // แปลงค่าเป็น string — ถ้าเป็น collection (List/array/Dictionary) โชว์ count + รายการ
@@ -236,32 +329,143 @@ namespace MCPBridge
             return "changed";
         }
 
+        // ── Alert eval ────────────────────────────────────────────────────────
+        static bool EvalAlert(WatchEntry w, string val)
+        {
+            if (w.alertOp == "changed")
+                return w.history.Count >= 2 && w.history[w.history.Count - 1] != w.history[w.history.Count - 2];
+            if (!double.TryParse(val, out double d)) return false;
+            double t = w.alertThreshold;
+            switch (w.alertOp)
+            {
+                case "lt":  return d <  t;
+                case "lte": return d <= t;
+                case "gt":  return d >  t;
+                case "gte": return d >= t;
+                case "eq":  return d == t;
+                case "ne":  return d != t;
+                default:    return false;
+            }
+        }
+
+        static string AlertText(WatchEntry w)
+        {
+            if (w.alertOp == "changed") return "changed";
+            string sym = w.alertOp switch
+            { "lt" => "<", "lte" => "<=", "gt" => ">", "gte" => ">=", "eq" => "==", "ne" => "!=", _ => w.alertOp };
+            return $"{sym} {w.alertThreshold}";
+        }
+
+        // map op จากหลายรูปแบบ → canonical (null = ไม่รองรับ)
+        static string NormalizeOp(string op)
+        {
+            switch ((op ?? "").Trim().ToLowerInvariant())
+            {
+                case "<": case "lt": return "lt";
+                case "<=": case "lte": return "lte";
+                case ">": case "gt": return "gt";
+                case ">=": case "gte": return "gte";
+                case "==": case "=": case "eq": return "eq";
+                case "!=": case "ne": case "<>": return "ne";
+                case "changed": case "change": case "diff": return "changed";
+                default: return null;
+            }
+        }
+
         // ── Public API ────────────────────────────────────────────────────────
 
-        /// <summary>เพิ่ม watch — คืน error string หรือ null ถ้าสำเร็จ</summary>
+        /// <summary>
+        /// เพิ่ม watch — คืน error string หรือ null ถ้าสำเร็จ.
+        /// component ว่างได้ → auto หา component ที่มี field นั้นเอง.
+        /// object ว่างได้ → ใช้ GameObject ที่เลือกใน Hierarchy ตอนนี้ (pin ชื่อไว้).
+        /// </summary>
         public static string AddWatch(string objectName, string componentType, string fieldName)
+            => AddWatchCore(objectName, componentType, fieldName, null, 0);
+
+        /// <summary>
+        /// watch_alert — watch + เงื่อนไข แล้ว log warning + นับ ตอนเงื่อนไข "กลายเป็นจริง".
+        /// op: lt|lte|gt|gte|eq|ne (เทียบ value) หรือ changed (ค่าเปลี่ยน). คืน error หรือ null.
+        /// </summary>
+        public static string AddAlert(string objectName, string componentType, string fieldName, string op, double threshold)
         {
-            if (string.IsNullOrEmpty(objectName)) return "objectName required";
-            if (string.IsNullOrEmpty(componentType)) return "component required";
-            if (string.IsNullOrEmpty(fieldName)) return "field required";
+            string nop = NormalizeOp(op);
+            if (nop == null) return "op ต้องเป็น lt|lte|gt|gte|eq|ne|changed (หรือ < <= > >= == != )";
+            return AddWatchCore(objectName, componentType, fieldName, nop, threshold);
+        }
+
+        static string AddWatchCore(string objectName, string componentType, string fieldName, string alertOp, double alertThreshold)
+        {
+            if (string.IsNullOrEmpty(fieldName)) return "ต้องระบุ field (เช่น currentHp หรือ Damageable.Hp.Value)";
+
+            // object ว่าง → ใช้ตัวที่เลือกใน Hierarchy (main thread เท่านั้น — เรียกผ่าน ExecuteOnMainThread/OnGUI)
+            if (string.IsNullOrEmpty(objectName))
+            {
+                var sel = Selection.activeGameObject;
+                if (sel == null) return "ไม่ได้ระบุ object และไม่ได้เลือกอะไรใน Hierarchy — เลือก GameObject ก่อน หรือส่ง objectName";
+                objectName = sel.name;
+            }
+            componentType = componentType?.Trim() ?? "";   // ว่าง = auto
 
             lock (_lock)
             {
-                // กัน duplicate key
                 string key = $"{objectName}.{componentType}.{fieldName}";
                 foreach (var w in _watches)
-                    if ($"{w.objectName}.{w.componentType}.{w.fieldName}" == key)
-                        return $"watch already exists: {key}";
+                    if (w.Key == key)
+                    {
+                        // มี watch อยู่แล้ว — ถ้ามาพร้อม alert ก็แค่อัปเดตเงื่อนไข (ไม่ถือเป็น error)
+                        if (alertOp != null) { w.alertOp = alertOp; w.alertThreshold = alertThreshold; w.alertWasTrue = false; return null; }
+                        return $"watch มีอยู่แล้ว: {key}";
+                    }
 
                 _watches.Add(new WatchEntry
                 {
                     objectName = objectName,
                     componentType = componentType,
-                    fieldName = fieldName
+                    fieldName = fieldName,
+                    alertOp = alertOp,
+                    alertThreshold = alertThreshold,
                 });
             }
             return null;
         }
+
+        /// <summary>ลบ watch ตัวเดียวตาม key (objectName.componentType.fieldName) — คืน true ถ้าเจอ+ลบ</summary>
+        public static bool RemoveWatch(string key)
+        {
+            lock (_lock)
+            {
+                int idx = _watches.FindIndex(w => w.Key == key);
+                if (idx < 0) return false;
+                _watches.RemoveAt(idx);
+                return true;
+            }
+        }
+
+        /// <summary>snapshot รายตัวสำหรับ UI panel</summary>
+        public static List<WatchView> Snapshot()
+        {
+            var list = new List<WatchView>();
+            lock (_lock)
+            {
+                foreach (var w in _watches)
+                {
+                    string cur = w.history.Count > 0 ? w.history[w.history.Count - 1] : "n/a";
+                    list.Add(new WatchView
+                    {
+                        key = w.Key, objectName = w.objectName, component = w.ShowComponent,
+                        field = w.fieldName, value = cur, trend = Trend(w.history),
+                        status = cur.StartsWith("(") || cur == NOT_FOUND ? "error" : "ok",
+                        history = w.history.ToArray(),
+                        alert = string.IsNullOrEmpty(w.alertOp) ? "" : AlertText(w),
+                        alertCount = w.alertCount,
+                    });
+                }
+            }
+            return list;
+        }
+
+        /// <summary>มี watch กี่ตัว (ให้ UI โชว์ count บนปุ่ม)</summary>
+        public static int Count { get { lock (_lock) return _watches.Count; } }
 
         /// <summary>JSON รายงานสถานะปัจจุบันของ watch ทั้งหมด</summary>
         public static string GetReport()
@@ -276,7 +480,7 @@ namespace MCPBridge
                 {
                     if (i > 0) sb.Append(",");
                     var w = _watches[i];
-                    string key = $"{w.objectName}.{w.componentType}.{w.fieldName}";
+                    string key = w.Key;
                     string cur = w.history.Count > 0 ? w.history[w.history.Count - 1] : "n/a";
                     string prev = w.history.Count > 1 ? w.history[w.history.Count - 2] : cur;
                     string trend = Trend(w.history);
@@ -291,9 +495,11 @@ namespace MCPBridge
                     histSb.Append("]");
 
                     string status = cur.StartsWith("(") ? "error" : "ok";
-                    sb.Append($"{{\"key\":\"{MCPHandlers.EscapeJsonPublic(key)}\",");
+                    string alertJson = string.IsNullOrEmpty(w.alertOp) ? ""
+                        : $"\"alert\":\"{MCPHandlers.EscapeJsonPublic(AlertText(w))}\",\"alertCount\":{w.alertCount},\"alerting\":{w.alertWasTrue.ToString().ToLower()},";
+                    sb.Append($"{{{alertJson}\"key\":\"{MCPHandlers.EscapeJsonPublic(key)}\",");
                     sb.Append($"\"object\":\"{MCPHandlers.EscapeJsonPublic(w.objectName)}\",");
-                    sb.Append($"\"component\":\"{MCPHandlers.EscapeJsonPublic(w.componentType)}\",");
+                    sb.Append($"\"component\":\"{MCPHandlers.EscapeJsonPublic(w.ShowComponent)}\",");
                     sb.Append($"\"field\":\"{MCPHandlers.EscapeJsonPublic(w.fieldName)}\",");
                     sb.Append($"\"value\":\"{MCPHandlers.EscapeJsonPublic(cur)}\",");
                     sb.Append($"\"prev\":\"{MCPHandlers.EscapeJsonPublic(prev)}\",");
