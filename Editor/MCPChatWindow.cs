@@ -2729,16 +2729,32 @@ namespace MCPBridge
                             // ── round 2: data command → ส่งผลกลับให้ AI สรุปอ่านง่าย (ไม่โชว์ JSON ดิบ) ──
                             _pending.Enqueue(() => SetMessage(s, item.PlaceholderIndex, "assistant", THINKING));
                             Repaint();
-                            string fp = $"คำถามเดิมของผู้ใช้: {item.RawPrompt}\n\n" +
-                                        $"นี่คือผลลัพธ์ JSON จากคำสั่ง {cmdName} ของ Unity:\n{execResult}\n\n" +
-                                        "วิเคราะห์ผลนี้ \"โดยตอบคำถามเดิมของผู้ใช้\" เป็นภาษาไทย ตามรูปแบบ Header(Dev)/Header(Art) — " +
-                                        "ห้ามแสดง JSON ดิบ ให้จัดกลุ่ม/นับ/ชี้ประเด็นที่น่าสนใจแทน";
+
+                            // capture_screenshot → แนบ "รูปจริง" ให้ AI เห็น (ไม่ใช่แค่ path)
+                            List<ClaudeImage> followImages = null;
+                            string fp;
+                            if (cmdName == "capture_screenshot")
+                            {
+                                string shotPath = ExtractScreenshotPath(execResult);
+                                followImages = BuildScreenshotImages(shotPath);
+                                fp = $"คำถามเดิมของผู้ใช้: {item.RawPrompt}\n\n" +
+                                     (followImages != null
+                                        ? "นี่คือ screenshot จาก Unity (แนบรูปมาด้วย) — วิเคราะห์สิ่งที่เห็นในภาพเพื่อตอบคำถามเดิมของผู้ใช้ เป็นภาษาไทย ตามรูปแบบ Header(Dev)/Header(Art)"
+                                        : $"จับ screenshot แล้วแต่โหลดรูปไม่ได้ ({EscapeForPrompt(execResult)}) — แจ้งผู้ใช้สั้นๆ");
+                            }
+                            else
+                            {
+                                fp = $"คำถามเดิมของผู้ใช้: {item.RawPrompt}\n\n" +
+                                     $"นี่คือผลลัพธ์ JSON จากคำสั่ง {cmdName} ของ Unity:\n{execResult}\n\n" +
+                                     "วิเคราะห์ผลนี้ \"โดยตอบคำถามเดิมของผู้ใช้\" เป็นภาษาไทย ตามรูปแบบ Header(Dev)/Header(Art) — " +
+                                     "ห้ามแสดง JSON ดิบ ให้จัดกลุ่ม/นับ/ชี้ประเด็นที่น่าสนใจแทน";
+                            }
                             ClaudeResponse follow;
                             try
                             {
                                 follow = s.backend == 1
-                                    ? await ClaudeCliClient.SendAsync(fp, null, token, s.cliSessionId, curRole)
-                                    : await ClaudeAPIClient.SendAsync(fp, null, token, curRole, item.History);
+                                    ? await ClaudeCliClient.SendAsync(fp, followImages, token, s.cliSessionId, curRole)
+                                    : await ClaudeAPIClient.SendAsync(fp, followImages, token, curRole, item.History);
                                 if (s.backend == 1 && !string.IsNullOrEmpty(follow?.SessionId))
                                     s.cliSessionId = follow.SessionId;   // ไม่ ++cliTurnCount (round เดียวกับ user)
                             }
@@ -2811,6 +2827,7 @@ namespace MCPBridge
             "read_console","read_logfile","capture_state","perf_audit","perf_worst",
             "refactor_audit","audit_textures","audit_unused","audit_empty_folders",
             "memory_snapshot","fusion_stats","get_exceptions","watch_get","read_script",
+            "capture_screenshot",   // round-2 แนบรูปจริงให้ AI วิเคราะห์ (ไม่ใช่แค่ path)
         };
 
         // คะแนนความเกี่ยวข้องของ prefab กับ script ที่ @ มา (ชื่อตรง/ชื่อ script อยู่ในชื่อ prefab = เกี่ยวมาก)
@@ -2864,6 +2881,34 @@ namespace MCPBridge
         // single source ของ map ชื่อ→path อยู่ที่ MCPHandlers.CmdAlias (กัน drift กับ Dispatch)
         static string CommandJsonToPath(string json)
             => MCPHandlers.ResolvePath(ExtractCommandName(json));
+
+        // ดึง path ของ screenshot จากผล execResult (JSON มี backslash escaped → unescape)
+        static string ExtractScreenshotPath(string execResult)
+        {
+            if (string.IsNullOrEmpty(execResult)) return null;
+            var m = System.Text.RegularExpressions.Regex.Match(execResult, "\"screenshot\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"");
+            if (!m.Success) return null;
+            return m.Groups[1].Value.Replace("\\\\", "\\").Replace("\\\"", "\"");
+        }
+
+        // อ่านไฟล์ PNG → ClaudeImage (resize ให้พอดี API) เพื่อแนบให้ AI วิเคราะห์ภาพ round-2
+        static List<ClaudeImage> BuildScreenshotImages(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+            try
+            {
+                byte[] bytes = ImageOptimizer.ResizeForApi(path, 1568, out string mime);
+                return new List<ClaudeImage> { new ClaudeImage { Base64 = Convert.ToBase64String(bytes), Mime = mime } };
+            }
+            catch
+            {
+                try { return new List<ClaudeImage> { new ClaudeImage { Base64 = Convert.ToBase64String(File.ReadAllBytes(path)), Mime = "image/png" } }; }
+                catch { return null; }
+            }
+        }
+
+        static string EscapeForPrompt(string s) =>
+            string.IsNullOrEmpty(s) ? "" : (s.Length > 300 ? s.Substring(0, 300) + "…" : s);
 
         // ── Types ─────────────────────────────────────────────────────────
         [Serializable]

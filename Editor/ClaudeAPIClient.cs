@@ -333,8 +333,11 @@ Set Import Settings (แก้ texture importer ตามที่ audit_texture
 {""command"":""set_import_settings"",""path"":""Assets/Art/icon.png"",""maxSize"":1024,""compression"":""high"",""readable"":""false"",""crunch"":""true""}
 → workflow: audit_textures หา texture ที่ flag → set_import_settings แก้ทีละไฟล์ → ปิด loop.
 
-Capture Screenshot (render กล้อง Game/Scene เป็น PNG แล้วคืน path — ใช้ ""ดูผลจริง"" หลังแก้ โดยเฉพาะงาน Art/UI):
+Capture Screenshot (จับ Game/Scene เป็น PNG เพื่อ ""ดูผลจริง"" หลังแก้ — bridge คืนเป็นรูปจริงให้เห็นเลย):
 {""command"":""capture_screenshot"",""view"":""game"",""width"":1280,""height"":720}
+→ default render กล้อง (ไม่ติด Screen-Space-Overlay UI). ตอน Play อยากได้ overlay UI ด้วย → overlay=true (จับ backbuffer จริง ที่ res จอ):
+{""command"":""capture_screenshot"",""view"":""game"",""overlay"":true}
+   ใส่ path เพื่อกำหนดที่เซฟเอง · base64=true เพื่อฝัง PNG ในผล (cap ~3MB)
 
 Build Player (build standalone/mobile ผ่าน BuildPipeline — บล็อกนาน, ออก Play Mode + compile เสร็จก่อน):
 {""command"":""build_player"",""path"":""Builds/win/Game.exe"",""target"":""win64"",""dev"":false}

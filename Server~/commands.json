@@ -164,10 +164,13 @@
       "mipmaps": { "type": "string", "opt": true, "desc": "'true'/'false' — Generate Mip Maps" },
       "crunch": { "type": "string", "opt": true, "desc": "'true'/'false' — Crunch compression (smaller on disk)" }
     } },
-    { "tool": "unity_capture_screenshot", "command": "capture_screenshot", "path": "/view/screenshot", "description": "Render the Game or Scene camera to a PNG on disk and return its file path — use to SEE the actual result after a change (great for Art/UI verification). Read-only.", "params": {
+    { "tool": "unity_capture_screenshot", "command": "capture_screenshot", "path": "/view/screenshot", "description": "Capture the Game or Scene view to a PNG and return it as an actual image (the bridge reads the file off disk and attaches it) — use to SEE the result after a change (great for Art/UI). By default renders the camera (no Screen-Space-Overlay UI); set overlay=true during Play to grab the real backbuffer including overlay UI (at screen resolution). Read-only.", "params": {
       "view": { "type": "enum", "values": ["game","scene"], "opt": true, "default": "game", "desc": "Which camera to capture" },
-      "width": { "type": "number", "opt": true, "default": 1280, "desc": "Output width (64..4096)" },
-      "height": { "type": "number", "opt": true, "default": 720, "desc": "Output height (64..4096)" }
+      "width": { "type": "number", "opt": true, "default": 1280, "desc": "Output width (64..4096); ignored when overlay=true" },
+      "height": { "type": "number", "opt": true, "default": 720, "desc": "Output height (64..4096); ignored when overlay=true" },
+      "overlay": { "type": "boolean", "opt": true, "default": false, "desc": "Play-only: capture the real backbuffer incl. Screen-Space-Overlay UI (at screen res)" },
+      "path": { "type": "string", "opt": true, "desc": "Custom output path (Assets/... or absolute); default Library/DeltaMCP/screenshots/" },
+      "base64": { "type": "boolean", "opt": true, "default": false, "desc": "Also embed the PNG as base64 in the JSON (capped ~3MB); the bridge already returns the image regardless" }
     } },
     { "tool": "unity_build_player", "command": "build_player", "path": "/build/player", "timeoutMs": 600000, "noRetry": true, "description": "Build a standalone/mobile player via BuildPipeline. Blocking and can take minutes (the bridge may time out while the build continues). Uses enabled Build Settings scenes unless 'scenes' is given. Switches the active build target if needed. Requires Write ON.", "params": {
       "path": { "type": "string", "desc": "Output path, e.g. Builds/win/Game.exe (or a folder for some targets)" },

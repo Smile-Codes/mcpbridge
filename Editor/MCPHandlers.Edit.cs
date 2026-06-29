@@ -237,50 +237,96 @@ namespace MCPBridge
         }
 
         // ── Capture Screenshot — render Game/Scene camera เป็น PNG (ให้ AI เห็นผลจริง) ──
+        //   overlay=true + กำลัง Play → ใช้ ScreenCapture (ติด Screen-Space-Overlay UI ด้วย แต่ที่ res จอจริง)
+        //   base64=true → แนบ PNG (base64) มาในผลด้วย (มี cap กัน payload บวม)
+        //   path → กำหนด output เอง (ไม่งั้นลง Library/DeltaMCP/screenshots/)
+        const long SCREENSHOT_B64_CAP = 3_000_000;   // ~3MB PNG — เกินนี้ไม่ฝัง base64 (กัน payload ระเบิด)
+
         static string CaptureScreenshot(string body)
         {
             var data = ParseReq<ScreenshotRequest>(body);
             return ExecuteOnMainThread(() =>
             {
                 string which = string.IsNullOrEmpty(data.view) ? "game" : data.view.ToLowerInvariant();
-                Camera cam = which == "scene"
-                    ? (SceneView.lastActiveSceneView != null ? SceneView.lastActiveSceneView.camera : null)
-                    : (Camera.main ?? UnityEngine.Object.FindObjectOfType<Camera>());
-                if (cam == null)
-                    return $"{{\"error\":\"ไม่พบกล้องสำหรับ view '{which}' (game ต้องมี Camera ใน scene / scene ต้องเปิด Scene View)\"}}";
+                bool wantOverlay = data.overlay && which != "scene";
 
                 int w = data.width  > 0 ? Mathf.Clamp(data.width, 64, 4096)  : 1280;
                 int h = data.height > 0 ? Mathf.Clamp(data.height, 64, 4096) : 720;
 
-                var rt = new RenderTexture(w, h, 24);
-                var prevTarget = cam.targetTexture;
-                var prevActive = RenderTexture.active;
                 Texture2D tex = null;
-                try
+                string captureMode;
+
+                if (wantOverlay && Application.isPlaying)
                 {
-                    cam.targetTexture = rt;
-                    cam.Render();
-                    RenderTexture.active = rt;
-                    tex = new Texture2D(w, h, TextureFormat.RGB24, false);
-                    tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-                    tex.Apply();
+                    // จับ backbuffer จริงของ Game view → ติด overlay UI/post ด้วย (res = จอจริง, ไม่อิง w/h)
+                    // หมายเหตุ: เรียกกลางเฟรมอาจคลาดไป 1 เฟรม — best-effort
+                    tex = ScreenCapture.CaptureScreenshotAsTexture();
+                    if (tex == null) return "{\"error\":\"ScreenCapture คืน null — ลองตอน Play + มี Game view เปิดอยู่\"}";
+                    w = tex.width; h = tex.height;
+                    captureMode = "screen-overlay";
                 }
-                finally
+                else
                 {
-                    cam.targetTexture = prevTarget;
-                    RenderTexture.active = prevActive;
-                    rt.Release();
-                    UnityEngine.Object.DestroyImmediate(rt);
+                    if (wantOverlay && !Application.isPlaying)
+                        return "{\"error\":\"overlay=true ใช้ได้เฉพาะตอน Play (จับ backbuffer จริง) — ตอน edit ให้ overlay=false\"}";
+
+                    Camera cam = which == "scene"
+                        ? (SceneView.lastActiveSceneView != null ? SceneView.lastActiveSceneView.camera : null)
+                        : (Camera.main ?? UnityEngine.Object.FindObjectOfType<Camera>());
+                    if (cam == null)
+                        return $"{{\"error\":\"ไม่พบกล้องสำหรับ view '{which}' (game ต้องมี Camera ใน scene / scene ต้องเปิด Scene View)\"}}";
+
+                    var rt = new RenderTexture(w, h, 24);
+                    var prevTarget = cam.targetTexture;
+                    var prevActive = RenderTexture.active;
+                    try
+                    {
+                        cam.targetTexture = rt;
+                        cam.Render();
+                        RenderTexture.active = rt;
+                        tex = new Texture2D(w, h, TextureFormat.RGB24, false);
+                        tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+                        tex.Apply();
+                    }
+                    finally
+                    {
+                        cam.targetTexture = prevTarget;
+                        RenderTexture.active = prevActive;
+                        rt.Release();
+                        UnityEngine.Object.DestroyImmediate(rt);
+                    }
+                    captureMode = which == "scene" ? "scene-cam" : "game-cam";
                 }
 
                 byte[] png = tex.EncodeToPNG();
                 UnityEngine.Object.DestroyImmediate(tex);
 
-                string dir = Path.Combine(Application.dataPath, "..", "Library", "DeltaMCP", "screenshots");
-                Directory.CreateDirectory(dir);
-                string file = Path.GetFullPath(Path.Combine(dir, $"shot_{which}_{DateTime.Now:HHmmss}_{Time.frameCount}.png"));
+                // output path: ที่ผู้ใช้กำหนด หรือ default Library
+                string file;
+                if (!string.IsNullOrEmpty(data.path))
+                {
+                    file = data.path.StartsWith("Assets/") ? ToAbsolutePath(data.path) : Path.GetFullPath(data.path);
+                    Directory.CreateDirectory(Path.GetDirectoryName(file));
+                }
+                else
+                {
+                    string dir = Path.Combine(Application.dataPath, "..", "Library", "DeltaMCP", "screenshots");
+                    Directory.CreateDirectory(dir);
+                    file = Path.GetFullPath(Path.Combine(dir, $"shot_{which}_{DateTime.Now:HHmmss}_{Time.frameCount}.png"));
+                }
                 File.WriteAllBytes(file, png);
-                return $"{{\"screenshot\":\"{EscapeJson(file)}\",\"view\":\"{which}\",\"size\":[{w},{h}],\"bytes\":{png.Length}}}";
+
+                string b64 = "";
+                if (data.base64)
+                {
+                    if (png.Length <= SCREENSHOT_B64_CAP)
+                        b64 = $",\"base64\":\"{Convert.ToBase64String(png)}\"";
+                    else
+                        b64 = $",\"base64Skipped\":\"PNG {png.Length / 1024}KB เกิน cap {SCREENSHOT_B64_CAP / 1024}KB — ลด width/height\"";
+                }
+
+                return $"{{\"screenshot\":\"{EscapeJson(file)}\",\"view\":\"{which}\",\"mode\":\"{captureMode}\"," +
+                       $"\"size\":[{w},{h}],\"bytes\":{png.Length}{b64}}}";
             });
         }
 
@@ -390,7 +436,7 @@ namespace MCPBridge
             return Path.GetFullPath(Path.Combine(projectRoot, assetPath));
         }
 
-        static int CountOccurrences(string haystack, string needle)
+        internal static int CountOccurrences(string haystack, string needle)
         {
             if (string.IsNullOrEmpty(needle)) return 0;
             int n = 0, idx = 0;
@@ -398,7 +444,7 @@ namespace MCPBridge
             return n;
         }
 
-        static string ReplaceFirst(string s, string find, string replace)
+        internal static string ReplaceFirst(string s, string find, string replace)
         {
             int idx = s.IndexOf(find, StringComparison.Ordinal);
             return idx < 0 ? s : s.Substring(0, idx) + replace + s.Substring(idx + find.Length);
@@ -435,7 +481,8 @@ namespace MCPBridge
         }
 
         // ดึง raw ของ array (รวมเนื้อใน [ ]) ตามชื่อ key — brace/bracket aware
-        static string ExtractJsonArrayRaw(string json, string key)
+        // internal: ให้ MCPBridge.Editor.Tests เรียก unit-test ได้ (ดู Tests/Editor/BatchParserTests.cs)
+        internal static string ExtractJsonArrayRaw(string json, string key)
         {
             if (string.IsNullOrEmpty(json)) return null;
             var m = System.Text.RegularExpressions.Regex.Match(json, "\"" + System.Text.RegularExpressions.Regex.Escape(key) + "\"\\s*:\\s*\\[");
@@ -461,7 +508,7 @@ namespace MCPBridge
         }
 
         // แยก top-level object ใน array string "[ {..}, {..} ]" → list ของ "{..}"
-        static List<string> SplitTopLevelObjects(string arrayRaw)
+        internal static List<string> SplitTopLevelObjects(string arrayRaw)
         {
             var list = new List<string>();
             if (string.IsNullOrEmpty(arrayRaw)) return list;
@@ -487,7 +534,7 @@ namespace MCPBridge
         [Serializable] class EditScriptRequest     { public string name; public string path; public string find; public string replace; public bool all; }
         [Serializable] class AssignRefRequest       { public string name; public string component; public string property; public string target; public bool asset; }
         [Serializable] class ImportSettingsRequest  { public string path; public int maxSize; public string compression; public string readable; public string mipmaps; public string crunch; }
-        [Serializable] class ScreenshotRequest      { public string view; public int width; public int height; }
+        [Serializable] class ScreenshotRequest      { public string view; public int width; public int height; public string path; public bool base64; public bool overlay; }
         [Serializable] class BuildRequest           { public string target; public string path; public string scenes; public bool dev; }
     }
 }

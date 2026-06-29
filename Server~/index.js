@@ -192,8 +192,23 @@ const _cmds = loadCommands();
 for (const cmd of _cmds) {
   // per-command overrides (commands.json): timeoutMs for slow jobs, noRetry for non-idempotent ones.
   const opts = { timeoutMs: cmd.timeoutMs, maxRetries: cmd.noRetry ? 1 : undefined };
+  const isScreenshot = cmd.command === "capture_screenshot";
   server.tool(cmd.tool, cmd.description, toZodShape(cmd.params), async (args) => {
     const r = await callUnity(cmd.path, args || {}, opts);
+    // capture_screenshot: read the PNG off disk (bridge runs on the same machine as Unity) and
+    // return it as an actual image block so Claude can SEE the result — not just a file path.
+    if (isScreenshot && r && r.screenshot && !r.error) {
+      try {
+        const png = fs.readFileSync(r.screenshot);
+        const meta = { screenshot: r.screenshot, view: r.view, mode: r.mode, size: r.size, bytes: r.bytes };
+        return { content: [
+          { type: "text", text: JSON.stringify(meta, null, 2) },
+          { type: "image", data: png.toString("base64"), mimeType: "image/png" },
+        ] };
+      } catch (e) {
+        return { content: [{ type: "text", text: JSON.stringify({ ...r, _imageReadError: e.message }, null, 2) }] };
+      }
+    }
     return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
   });
 }

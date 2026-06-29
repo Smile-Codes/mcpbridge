@@ -19,8 +19,12 @@ All notable changes to this package are documented here.
   - `unity_set_import_settings` (`/asset/import-settings`) — apply texture importer changes
     (maxSize/compression/readable/mipmaps/crunch); the fix that pairs with `audit_textures`.
     Write-gated.
-  - `unity_capture_screenshot` (`/view/screenshot`) — render the Game/Scene camera to a PNG and
-    return its path (verify results visually). Read-only.
+  - `unity_capture_screenshot` (`/view/screenshot`) — capture the Game/Scene view to a PNG; the
+    bridge reads it off disk and returns it as an actual **image** block (Claude sees the result, not
+    just a path). The in-Unity chat (F12) also auto-attaches the PNG to a round-2 request so the
+    embedded AI analyzes the image, not the file path. Supports `overlay=true` (Play-only: real
+    backbuffer incl. Screen-Space-Overlay UI), a custom `path`, and `base64` embedding (capped ~3MB).
+    Read-only.
   - `unity_build_player` (`/build/player`) — build a standalone/mobile player via `BuildPipeline`
     (blocking; switches active target if needed). Write-gated, long `timeoutMs`, `noRetry`.
   - `unity_git_status` (`/git/status`) — branch + porcelain working-tree changes before suggesting a
@@ -33,6 +37,11 @@ All notable changes to this package are documented here.
   `UnityEditor.TestRunner`; if `com.unity.test-framework` is absent only that assembly is skipped (the
   main 54 tools are unaffected) and the routes return a helpful error. The main assembly wires in via
   nullable `MCPHandlers.RunTestsHandler` / `GetTestResultsHandler` delegates set at load.
+- EditMode tests for the `run_batch` JSON parser and `edit_script` primitives
+  (`Tests/Editor/`, assembly `MCPBridge.Editor.Tests`, gated by `UNITY_INCLUDE_TESTS`). Internal
+  parser helpers are exposed via `InternalsVisibleTo` (`Editor/AssemblyInfo.cs`). To run them in a
+  consuming project, add `"com.mcpbridge"` to `testables` in `Packages/manifest.json`, then open
+  Window → General → Test Runner (or call `unity_run_tests`).
 - `Dispatch` gained a `rateLimited` flag so batch sub-commands bypass the per-second cap.
 - Node bridge `toZodShape` supports an `object[]` param type (for `run_batch`'s `commands` array).
 - `unity_run_csharp` tool (`/code/run`) — escape hatch that compiles and runs arbitrary C# against
