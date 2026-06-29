@@ -53,19 +53,25 @@ namespace MCPBridge
         Font LogFont => _logFont != null ? _logFont
             : (_logFont = Font.CreateDynamicFontFromOSFont(
                 new[] { "Consolas", "Menlo", "Courier New", "monospace" }, FONT_SIZE - 1));
-        // ฟอนต์เนื้อความ — bundle IBM Plex Sans Thai Looped (OFL) มากับโปรเจกต์ ทุกเครื่องเห็นเหมือนกัน
-        // fallback: Leelawadee UI (ไทยระบบ Windows) → Thonburi (mac) → Tahoma — Segoe UI ไม่มี glyph ไทย
-        const string UI_FONT_PATH = "Assets/Editor/UnityMCP/Fonts/IBMPlexSansThaiLooped-Regular.ttf";
+        // ฟอนต์เนื้อความ — bundle IBM Plex Sans Thai Looped (OFL) มากับ package ทุกเครื่องเห็นเหมือนกัน
+        // หาไฟล์ด้วย "ชื่อ asset" (AssetDatabase.FindAssets) แทน hardcode path → โหลดได้ทั้งตอน embed
+        // ใน Assets/ และตอนเป็น UPM package (Packages/com.mcpbridge/...) — path เปลี่ยนตามที่ติดตั้ง
+        // fallback OS: Segoe UI Variable / Inter (modern sans) → Leelawadee UI (ไทย) → Thonburi (mac)
+        const string UI_FONT_NAME = "IBMPlexSansThaiLooped";
         Font _uiFont;
         Font UiFont
         {
             get
             {
                 if (_uiFont != null) return _uiFont;
-                _uiFont = AssetDatabase.LoadAssetAtPath<Font>(UI_FONT_PATH);
+                foreach (var guid in AssetDatabase.FindAssets($"{UI_FONT_NAME} t:Font"))
+                {
+                    _uiFont = AssetDatabase.LoadAssetAtPath<Font>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (_uiFont != null) break;
+                }
                 if (_uiFont == null)
                     _uiFont = Font.CreateDynamicFontFromOSFont(
-                        new[] { "Leelawadee UI", "Thonburi", "Tahoma", "Segoe UI", "Arial" }, MSG_FONT);
+                        new[] { "Inter", "Segoe UI Variable", "Leelawadee UI", "Thonburi", "Tahoma", "Segoe UI", "Arial" }, MSG_FONT);
                 return _uiFont;
             }
         }
@@ -87,23 +93,26 @@ namespace MCPBridge
 
         const int MAX_IMAGES = 8;
         const int FONT_SIZE = 12;   // ฟอนต์ chrome (header/tab/ปุ่ม)
-        const int MSG_FONT  = 13;   // ฟอนต์เนื้อความ (อ่านง่ายขึ้น)
+        const int MSG_FONT  = 14;   // ฟอนต์เนื้อความ (อ่านง่าย คมขึ้น)
         const int SCRIPT_LIST_HEIGHT = 162;   // picker panel (@/#//) — 5 แถว + หัว
         const float INPUT_MIN = 40f;
         const float INPUT_MAX = 160f;
         float _inputHeight = INPUT_MIN;
 
-        // ── Theme (Anthropic warm / clay) ───────────────────────────────────
-        static readonly Color BG_DARK     = new Color(0.090f, 0.078f, 0.066f); // #171411
-        static readonly Color BG_SURFACE  = new Color(0.110f, 0.098f, 0.082f); // #1C1915 bubble/input
-        static readonly Color BG_RAISED   = new Color(0.122f, 0.110f, 0.090f); // header / chips
-        static readonly Color BORDER      = new Color(0.204f, 0.188f, 0.165f); // #34302A
-        static readonly Color BORDER_SOFT = new Color(0.165f, 0.150f, 0.128f);
-        static readonly Color ACCENT      = new Color(0.851f, 0.467f, 0.341f); // #D97757 clay
-        static readonly Color TEXT_WHITE  = new Color(0.925f, 0.902f, 0.863f); // #ECE6DC
-        static readonly Color TEXT_MUTE   = new Color(0.612f, 0.580f, 0.541f); // #9C948A
-        static readonly Color TEXT_HINT   = new Color(0.420f, 0.392f, 0.357f); // #6B645B
-        static readonly Color ONLINE      = new Color(0.361f, 0.729f, 0.490f); // soft green dot
+        // ── Theme (Midnight Indigo — cool charcoal + indigo accent) ──────────
+        static readonly Color BG_DARK     = new Color(0.059f, 0.067f, 0.090f); // #0F1117 base
+        static readonly Color BG_SURFACE  = new Color(0.094f, 0.106f, 0.133f); // #181B22 bubble/input
+        static readonly Color BG_RAISED   = new Color(0.125f, 0.141f, 0.180f); // #20242E header / chips
+        static readonly Color BORDER      = new Color(0.176f, 0.200f, 0.251f); // #2D3340
+        static readonly Color BORDER_SOFT = new Color(0.137f, 0.157f, 0.204f); // #232834
+        static readonly Color ACCENT      = new Color(0.486f, 0.424f, 1.000f); // #7C6CFF indigo-violet
+        static readonly Color ACCENT_2    = new Color(0.847f, 0.475f, 0.961f); // #D879F5 violet-pink (Art role)
+        static readonly Color TEXT_WHITE  = new Color(0.933f, 0.941f, 0.957f); // #EEF0F4 near-white
+        static readonly Color TEXT_MUTE   = new Color(0.604f, 0.627f, 0.678f); // #9AA0AD secondary
+        static readonly Color TEXT_HINT   = new Color(0.361f, 0.388f, 0.439f); // #5C6370 hint
+        static readonly Color ONLINE      = new Color(0.239f, 0.863f, 0.592f); // #3DDC97 green dot
+        static readonly Color DANGER      = new Color(1.000f, 0.420f, 0.420f); // #FF6B6B error/red
+        static readonly Color WARN        = new Color(1.000f, 0.722f, 0.282f); // #FFB848 warning
 
         // ── rounded-rect helpers (Unity 2022.3 GUI.DrawTexture borderRadius) ──
         static void RRect(Rect r, Color c, float radius)
@@ -397,7 +406,7 @@ namespace MCPBridge
             rightX -= 32;
 
             {
-                Color liveC = srvOn2 ? ONLINE : new Color(0.85f, 0.45f, 0.40f);
+                Color liveC = srvOn2 ? ONLINE : DANGER;
                 const float pw = 86f;
                 var pillR = new Rect(rightX - pw, barR.y + 8, pw, 22);
                 RRect(pillR, new Color(liveC.r, liveC.g, liveC.b, 0.13f), 11f);
@@ -414,7 +423,7 @@ namespace MCPBridge
                 int curRole = CurrentRole();
                 var roleR = new Rect(rightX - 66, barR.y + 8, 66, 22);
                 RBox(roleR, BG_RAISED, BORDER, 8f);
-                Color sq = curRole == 0 ? ACCENT : new Color(0.878f, 0.627f, 0.753f);
+                Color sq = curRole == 0 ? ACCENT : ACCENT_2;
                 RRect(new Rect(roleR.x + 10, roleR.y + 8, 7, 7), sq, 2f);
                 var roleTxt = new GUIStyle(EditorStyles.label) { alignment = TextAnchor.MiddleLeft, fontSize = FONT_SIZE - 2 };
                 roleTxt.normal.textColor = TEXT_WHITE;
@@ -440,7 +449,7 @@ namespace MCPBridge
                 var testR = new Rect(rightX - 78, barR.y + 8, 78, 22);
                 RBox(testR, BG_RAISED, BORDER, 8f);
                 var testTxt = new GUIStyle(EditorStyles.label) { alignment = TextAnchor.MiddleCenter, fontSize = FONT_SIZE - 2 };
-                testTxt.normal.textColor = new Color(0.60f, 0.82f, 0.62f);
+                testTxt.normal.textColor = ONLINE;
                 GUI.Label(testR, "🧪 ทดสอบ", testTxt);
                 if (GUI.Button(testR, GUIContent.none, GUIStyle.none))
                 {
@@ -475,12 +484,12 @@ namespace MCPBridge
 
             // status dot + label
             var dotStyle = new GUIStyle(EditorStyles.toolbarButton) { fontSize = FONT_SIZE - 1 };
-            dotStyle.normal.textColor = srvOn ? new Color(0.3f, 0.9f, 0.3f) : new Color(0.9f, 0.4f, 0.4f);
+            dotStyle.normal.textColor = srvOn ? ONLINE : DANGER;
             GUILayout.Label(srvOn ? $"● {MCPServer.Label}  port {MCPServer.Port}" : $"○ {MCPServer.Label}  stopped", dotStyle, GUILayout.Width(170));
 
             // Start / Stop
             var btnStyle = new GUIStyle(EditorStyles.toolbarButton) { fontSize = FONT_SIZE - 1 };
-            btnStyle.normal.textColor = srvOn ? new Color(1f, 0.5f, 0.4f) : new Color(0.4f, 0.9f, 0.5f);
+            btnStyle.normal.textColor = srvOn ? DANGER : ONLINE;
             if (GUILayout.Button(srvOn ? "⏹ Stop" : "▶ Start", btnStyle, GUILayout.Width(62)))
             {
                 if (srvOn) MCPServer.Stop(); else MCPServer.Start();
@@ -491,7 +500,7 @@ namespace MCPBridge
             // Allow Writes toggle
             bool curAllow = MCPHandlers.AllowWrites;
             var allowStyle = new GUIStyle(EditorStyles.toolbarButton) { fontSize = FONT_SIZE - 1 };
-            allowStyle.normal.textColor = curAllow ? ACCENT : new Color(0.55f, 0.55f, 0.55f);
+            allowStyle.normal.textColor = curAllow ? ACCENT : TEXT_MUTE;
             bool newAllow = GUILayout.Toggle(curAllow, curAllow ? "✏ Write ON" : "✏ Write OFF", allowStyle, GUILayout.Width(88));
             if (newAllow != curAllow) MCPHandlers.AllowWrites = newAllow;
 
@@ -501,7 +510,7 @@ namespace MCPBridge
             int errCount = 0;
             lock (log) foreach (var e in log) if (e.IsError) errCount++;
             var statStyle = new GUIStyle(EditorStyles.miniLabel) { fontSize = FONT_SIZE - 2 };
-            statStyle.normal.textColor = new Color(0.5f, 0.5f, 0.55f);
+            statStyle.normal.textColor = TEXT_HINT;
             GUILayout.Label($"{log.Count} cmds  {errCount} err", statStyle);
 
             if (GUILayout.Button("Clear", EditorStyles.toolbarButton, GUILayout.Width(44)))
@@ -521,13 +530,13 @@ namespace MCPBridge
             // ── styles: เวลา/ms = mono (Consolas) · ชื่อคำสั่ง = UI font (อ่านไทยชัด) ──
             var timeStyle = new GUIStyle(EditorStyles.miniLabel)
                 { font = LogFont, fontSize = FONT_SIZE - 2 };
-            timeStyle.normal.textColor = new Color(0.55f, 0.51f, 0.46f);
+            timeStyle.normal.textColor = TEXT_MUTE;
 
             var pathStyleOk = new GUIStyle(EditorStyles.label)
                 { font = UiFont, fontSize = FONT_SIZE, richText = false };
             pathStyleOk.normal.textColor = TEXT_WHITE;
             var pathStyleErr = new GUIStyle(pathStyleOk);
-            pathStyleErr.normal.textColor = new Color(1f, 0.48f, 0.45f);
+            pathStyleErr.normal.textColor = DANGER;
 
             var arrowStyle = new GUIStyle(EditorStyles.miniLabel)
                 { font = LogFont, fontSize = FONT_SIZE - 1 };
@@ -552,9 +561,9 @@ namespace MCPBridge
             for (int i = snapshot.Count - 1; i >= 0; i--)
             {
                 var e = snapshot[i];
-                Color bgRow   = e.IsError ? new Color(0.22f, 0.10f, 0.09f) : BG_SURFACE;
-                Color accent  = e.IsError ? new Color(0.85f, 0.34f, 0.30f) : ACCENT;
-                Color respCol = e.IsError ? new Color(1f, 0.48f, 0.45f)    : ONLINE;
+                Color bgRow   = e.IsError ? new Color(0.18f, 0.09f, 0.11f) : BG_SURFACE;
+                Color accent  = e.IsError ? DANGER : ACCENT;
+                Color respCol = e.IsError ? DANGER    : ONLINE;
 
                 // ── header row (คลิก = toggle expand) — การ์ดมุมโค้ง อ่านง่าย ──
                 var hdrFull = GUILayoutUtility.GetRect(0, 27, GUILayout.ExpandWidth(true));
@@ -574,9 +583,9 @@ namespace MCPBridge
                 GUI.Label(new Rect(hdr.x + 88, hdr.y + 3, hdr.width - 150, 19),
                     friendlyLabel, e.IsError ? pathStyleErr : pathStyleOk);
 
-                msStyle.normal.textColor = e.Ms > 200 ? new Color(1f, 0.72f, 0.28f)
+                msStyle.normal.textColor = e.Ms > 200 ? WARN
                                          : e.Ms > 50  ? new Color(0.85f, 0.85f, 0.45f)
-                                         : new Color(0.46f, 0.70f, 0.50f);
+                                         : ONLINE;
                 GUI.Label(new Rect(hdr.xMax - 56, hdr.y + 4, 48, 16), $"{e.Ms}ms", msStyle);
 
                 if (GUI.Button(hdrFull, GUIContent.none, GUIStyle.none)) { e.Expanded = !e.Expanded; Repaint(); }
@@ -589,7 +598,7 @@ namespace MCPBridge
 
                     // raw path (เล็กๆ สีจาง)
                     var rawStyle = new GUIStyle(EditorStyles.miniLabel) { fontSize = FONT_SIZE - 3 };
-                    rawStyle.normal.textColor = new Color(0.45f, 0.42f, 0.38f);
+                    rawStyle.normal.textColor = TEXT_HINT;
                     EditorGUILayout.BeginHorizontal();
                     GUILayout.Space(31);
                     GUILayout.Label(e.Path, rawStyle);
@@ -1005,7 +1014,7 @@ namespace MCPBridge
                 {
                     if (sel)      RRect(row, new Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.20f), 6f);
                     else if (hov) RRect(row, new Color(1f, 1f, 1f, 0.045f), 6f);
-                    rowSt.normal.textColor = sel ? new Color(0.95f, 0.72f, 0.60f) : hov ? TEXT_WHITE : TEXT_MUTE;
+                    rowSt.normal.textColor = sel ? ACCENT : hov ? TEXT_WHITE : TEXT_MUTE;
                     GUI.Label(new Rect(row.x + 26, row.y, row.width - 30, row.height), labels[i], rowSt);
                     if (sel) CenterLabel(new Rect(row.x + 4, row.y, 20, row.height), "✓", ACCENT, FONT_SIZE - 1);
                 }
@@ -1025,7 +1034,7 @@ namespace MCPBridge
             st.normal.textColor = TEXT_MUTE;
             float h = st.CalcHeight(new GUIContent(text), position.width - 32);
             var r = EditorGUILayout.GetControlRect(false, h);
-            RBox(r, new Color(0.102f, 0.090f, 0.078f), BORDER_SOFT, 8f);
+            RBox(r, BG_SURFACE, BORDER_SOFT, 8f);
             GUI.Label(r, text, st);
         }
 
@@ -1170,7 +1179,7 @@ namespace MCPBridge
             // style เล็ก (role/stat) — สร้างใหม่ทุกเฟรม + จัดกึ่งกลางแนวตั้ง ให้อยู่บรรทัดเดียวกัน
             _roleUser   = new GUIStyle(EditorStyles.miniBoldLabel) { fontSize = FONT_SIZE - 1, richText = true };
             _roleClaude = new GUIStyle(EditorStyles.miniBoldLabel) { fontSize = FONT_SIZE - 1, richText = true };
-            _roleUser.normal.textColor   = new Color(0.80f, 0.62f, 0.50f);
+            _roleUser.normal.textColor   = TEXT_MUTE;
             _roleClaude.normal.textColor = ACCENT;
             var textStyle = _msgTextStyle;
 
@@ -1216,7 +1225,7 @@ namespace MCPBridge
                     GUI.Label(new Rect(rr.x + 12, rr.y, rr.width - 84, rr.height), t, think);
                     // ปุ่มยกเลิก ✕ ต่ออัน
                     var xr = new Rect(rr.xMax - 62, rr.y + 3, 54, rr.height - 6);
-                    RRect(xr, new Color(0.46f, 0.28f, 0.26f), 6f);
+                    RRect(xr, new Color(0.32f, 0.16f, 0.18f), 6f);
                     var xStyle = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.MiddleCenter, fontSize = FONT_SIZE - 3 };
                     xStyle.normal.textColor = new Color(1f, 0.86f, 0.82f);
                     GUI.Label(xr, "✕ ยกเลิก", xStyle);
@@ -1277,8 +1286,8 @@ namespace MCPBridge
                 // เลือก view ตาม role ปัจจุบัน (Dev/Art) — user message คืน msg เดิมเสมอ
                 var displayMsg = msg.RoleView(CurrentRole());
                 bool isUser = displayMsg.Role == "user";
-                Color accent = isUser ? new Color(0.55f, 0.50f, 0.45f) : ACCENT;
-                Color bg     = new Color(0.122f, 0.110f, 0.092f);   // user/assistant พื้นสีเดียวกัน
+                Color accent = isUser ? TEXT_MUTE : ACCENT;
+                Color bg     = BG_SURFACE;   // user/assistant พื้นสีเดียวกัน
 
                 // ── ป้ายชื่อ (tag) ──
                 if (isUser)
@@ -1413,7 +1422,7 @@ namespace MCPBridge
                 _segTextStyle.normal.textColor = TEXT_WHITE;
                 _monoFont = Font.CreateDynamicFontFromOSFont(new[] { "Consolas", "Menlo", "Courier New", "monospace" }, MSG_FONT);
                 _codeStyle = new GUIStyle(EditorStyles.label) { wordWrap = false, richText = true, fontSize = MSG_FONT - 1, font = _monoFont, padding = new RectOffset(10, 10, 8, 8) };
-                _codeStyle.normal.textColor = new Color(0.812f, 0.780f, 0.733f);
+                _codeStyle.normal.textColor = new Color(0.82f, 0.84f, 0.88f);
                 _codeHeaderStyle = new GUIStyle(EditorStyles.miniLabel) { fontSize = FONT_SIZE - 2, padding = new RectOffset(8, 8, 3, 3), richText = true };
                 // หมายเหตุ: _tableCellStyle/_tableHeadStyle สร้างใน DrawTable ที่เดียว (กันตั้ง alignment ซ้ำ/ชน)
             }
@@ -1421,7 +1430,7 @@ namespace MCPBridge
             _segTextStyle.font = UiFont;
             _segTextStyle.normal.textColor = TEXT_WHITE;
             _codeStyle.fontSize = MSG_FONT - 1;
-            _codeStyle.normal.textColor = new Color(0.812f, 0.780f, 0.733f);
+            _codeStyle.normal.textColor = new Color(0.82f, 0.84f, 0.88f);
 
             float w = position.width - 62;   // ขอบขวาตรงกับ header card (inset 8)
             // แถบสี + เนื้อหา (เว้นซ้าย 8 + gap 8 หลังแถบ กันข้อความชนเส้น accent)
@@ -1455,7 +1464,7 @@ namespace MCPBridge
                         // code body (พื้นดำเข้ม + highlight + เลือกได้)
                         float ch = _codeStyle.CalcHeight(new GUIContent(seg.Rendered), w);
                         var cr = GUILayoutUtility.GetRect(w, ch);
-                        RRect4(cr, new Color(0.063f, 0.055f, 0.047f), 0f, 0f, 8f, 8f);
+                        RRect4(cr, new Color(0.063f, 0.071f, 0.094f), 0f, 0f, 8f, 8f);
                         EditorGUI.SelectableLabel(cr, seg.Rendered, _codeStyle);
                     }
                 }
@@ -1473,7 +1482,7 @@ namespace MCPBridge
         void DrawSegHeader(Seg seg, float w, string icon, string title, string copyText)
         {
             var hbar = GUILayoutUtility.GetRect(w, 24);
-            RRect4(hbar, new Color(0.102f, 0.090f, 0.078f), 8f, 8f, 0f, 0f);
+            RRect4(hbar, BG_RAISED, 8f, 8f, 0f, 0f);
             string arrow = seg.Collapsed ? "▶" : "▼";
             GUI.Label(new Rect(hbar.x + 6, hbar.y, hbar.width - 76, hbar.height), $"<color=white>{arrow}  {icon} {title}</color>", _codeHeaderStyle);
 
@@ -1537,9 +1546,9 @@ namespace MCPBridge
                 totalH += hMax;
             }
 
-            var line   = new Color(1f, 0.96f, 0.90f, 0.14f);   // เส้นตารางจาง (warm)
-            var cardBg = new Color(0.063f, 0.055f, 0.047f);    // พื้นการ์ด
-            var cellBg = new Color(0.110f, 0.098f, 0.082f);    // พื้นเซลล์
+            var line   = new Color(1f, 1f, 1f, 0.08f);          // เส้นตารางจาง (cool)
+            var cardBg = new Color(0.063f, 0.071f, 0.094f);    // พื้นการ์ด
+            var cellBg = BG_SURFACE;                            // พื้นเซลล์
 
             // จองพื้นที่ = การ์ด + margin บน-ล่าง
             float boxH = totalH + PAD * 2;
@@ -1595,7 +1604,7 @@ namespace MCPBridge
             // 📍 GC — toggle ดัก GC allocation callstack (กดได้เฉพาะตอน Play เหมือนปุ่ม Deep)
             // → ดูบรรทัดที่ alloc ผ่าน keyword gc/perf (auto-gather รวม Snapshot ให้)
             var gcStyle = new GUIStyle(small);
-            if (ProfilerReader.AllocCallstacks) gcStyle.normal.textColor = new Color(1f, 0.6f, 0.3f);
+            if (ProfilerReader.AllocCallstacks) gcStyle.normal.textColor = WARN;
             else if (!Application.isPlaying) gcStyle.normal.textColor = new Color(0.5f, 0.5f, 0.5f);   // หรี่ตอนยังไม่ Play (กดไม่ได้)
             string gcLabel = ProfilerReader.AllocCallstacks ? "📍 GC+" : "📍 GC";
             if (GUILayout.Button(new GUIContent(gcLabel, "toggle ดัก GC allocation callstack\nเล่นอยู่ → กดเปิด → พิมพ์/กด keyword gc หรือ perf → เห็นบรรทัดที่ alloc จริง\nดักเฉพาะ alloc ที่เกิดตอนเปิด (ไม่ย้อนหลัง) · ต้องกด Play ก่อน · recompile = ปิดเอง"), gcStyle, GUILayout.Height(20), GUILayout.Width(54)))
@@ -1609,7 +1618,7 @@ namespace MCPBridge
             // 🔬 Deep — จับ Deep Profile 5 วิ → CPU method + GC บรรทัด + Network bandwidth ราย object → ส่งอัตโนมัติ
             var deepStyle = new GUIStyle(small);
             string deepLabel;
-            if (CpuDeepCapture.IsCapturing) { deepStyle.normal.textColor = new Color(1f, 0.4f, 0.4f); deepLabel = $"⏺ {CpuDeepCapture.SecondsLeft}s"; }
+            if (CpuDeepCapture.IsCapturing) { deepStyle.normal.textColor = DANGER; deepLabel = $"⏺ {CpuDeepCapture.SecondsLeft}s"; }
             else deepLabel = "🔬 Deep";
             if (GUILayout.Button(new GUIContent(deepLabel, "จับเชิงลึก 5 วิ → CPU (method+บรรทัด) + GC (บรรทัดที่ alloc) + Network (bandwidth ราย object) → ส่งให้ AI อัตโนมัติ\nกดแล้วเล่นให้เกิดอาการหน่วงระหว่างนับถอยหลัง 5 วิ\n(ถ้าพิมพ์คำถามไว้ในช่อง จะส่งคำถามนั้น · ต้องกด Play ก่อน · หนักเฉพาะ 5 วิ ปิดเอง)"), deepStyle, GUILayout.Height(20), GUILayout.Width(64)))
             {
@@ -1629,7 +1638,7 @@ namespace MCPBridge
 
             // toggle แผง Live (real-time)
             var liveStyle = new GUIStyle(small);
-            if (_showLive) liveStyle.normal.textColor = new Color(0.4f, 0.9f, 0.5f);
+            if (_showLive) liveStyle.normal.textColor = ONLINE;
             if (GUILayout.Button(_showLive ? "🟢 Live" : "📈 Live", liveStyle, GUILayout.Height(20), GUILayout.Width(60)))
                 _showLive = !_showLive;
             } // SHOW_PROFILER_UI
@@ -1642,7 +1651,7 @@ namespace MCPBridge
 
             // toggle Realtime Monitor (background — จับ memory สูง/ค้าง → log)
             var monStyle = new GUIStyle(small);
-            if (RealtimeMonitor.IsOn) monStyle.normal.textColor = new Color(1f, 0.5f, 0.4f);
+            if (RealtimeMonitor.IsOn) monStyle.normal.textColor = DANGER;
             string monLabel = RealtimeMonitor.IsOn ? "🔴 Monitor" : "🩺 Monitor";
             if (GUILayout.Button(new GUIContent(monLabel, "ตรวจสุขภาพ Unity แบบ real-time (memory/ค้าง) → Library/DeltaMCP/monitor.log"), monStyle, GUILayout.Height(20), GUILayout.Width(78)))
                 RealtimeMonitor.Toggle();
@@ -1685,9 +1694,9 @@ namespace MCPBridge
             {
                 float fps = ProfilerReader.CurrentFps();
                 // สีตาม FPS: เขียว >=55, เหลือง >=30, แดง < 30
-                Color c = fps >= 55 ? new Color(0.4f, 0.9f, 0.5f)
-                        : fps >= 30 ? new Color(0.95f, 0.85f, 0.4f)
-                        : new Color(1f, 0.45f, 0.45f);
+                Color c = fps >= 55 ? ONLINE
+                        : fps >= 30 ? WARN
+                        : DANGER;
                 var style = new GUIStyle(EditorStyles.label) { fontSize = FONT_SIZE - 1, richText = true };
                 style.normal.textColor = c;
                 string bound = ProfilerReader.BoundStatus();
@@ -1854,12 +1863,12 @@ namespace MCPBridge
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             var hint = new GUIStyle(EditorStyles.miniLabel) { fontSize = FONT_SIZE - 3 };
-            hint.normal.textColor = new Color(0.55f, 0.55f, 0.55f);
+            hint.normal.textColor = TEXT_MUTE;
             GUILayout.Label("กดปุ่มเพื่อใส่ keyword ในช่องพิมพ์ · ชี้เมาส์ค้างเพื่อดูคำอธิบาย", hint);
 
-            DrawKwRow(s, "Dev",  KwG.Dev,  new Color(0.89f, 0.58f, 0.42f));
-            DrawKwRow(s, "Art",  KwG.Art,  new Color(0.95f, 0.66f, 0.80f));
-            DrawKwRow(s, "⚡ Both", KwG.Both, new Color(0.95f, 0.78f, 0.45f));
+            DrawKwRow(s, "Dev",  KwG.Dev,  ACCENT);
+            DrawKwRow(s, "Art",  KwG.Art,  ACCENT_2);
+            DrawKwRow(s, "⚡ Both", KwG.Both, WARN);
 
             EditorGUILayout.EndVertical();
         }
@@ -1929,7 +1938,7 @@ namespace MCPBridge
                 bool inputFocused = GUI.GetNameOfFocusedControl() == "PromptField";
                 Color borderCol = inputFocused ? ACCENT : BORDER;
                 RRect(boxR, borderCol, 11f);
-                RRect(innerR, inputFocused ? new Color(0.130f, 0.116f, 0.098f) : new Color(0.110f, 0.098f, 0.082f), 10f);
+                RRect(innerR, inputFocused ? BG_RAISED : BG_SURFACE, 10f);
             }
 
             // vertical scroll เท่านั้น — ไม่มี horizontal bar ข้างล่าง
@@ -1956,7 +1965,7 @@ namespace MCPBridge
                 var phStyle = new GUIStyle(inputStyle) { padding = new RectOffset(11, 10, 9, 8) };
                 phStyle.normal.textColor = TEXT_HINT;
                 phStyle.normal.background = null;
-                GUI.Label(innerR, "พิมพ์คำถาม... (Enter ส่ง · Shift+Enter ขึ้นบรรทัด)", phStyle);
+                GUI.Label(innerR, "ถาม Claude หรือสั่งงาน Unity…   Enter ส่ง · Shift+Enter ขึ้นบรรทัด", phStyle);
             }
 
             HandleDragDrop(GUILayoutUtility.GetLastRect());
@@ -1999,8 +2008,8 @@ namespace MCPBridge
             if (busy)
             {
                 var stopR = new Rect(rx - 76, btnRow.y, 76, btnRow.height);
-                RRect(stopR, new Color(0.42f, 0.24f, 0.22f), 8f);
-                CenterLabel(stopR, "⛔ Stop", new Color(1f, 0.72f, 0.68f), FONT_SIZE - 1);
+                RRect(stopR, new Color(0.32f, 0.16f, 0.18f), 8f);
+                CenterLabel(stopR, "⛔ Stop", new Color(1f, 0.80f, 0.80f), FONT_SIZE - 1);
                 if (GUI.Button(stopR, GUIContent.none, GUIStyle.none))
                     StopSession(s);
                 rx -= 84;
@@ -2457,9 +2466,9 @@ namespace MCPBridge
             {
                 s.messages.Add(new ChatMessage("user", prompt));
                 s.messages.Add(new ChatMessage("assistant",
-                    "🔴 **MCP ยังไม่ต่อ** — กดเปิดที่ Unity ก่อนนะครับ\n\n" +
-                    "ไปที่หน้าต่าง **MCP Bridge → แท็บ \"Claude In\" → กดปุ่ม ▶ Start**\n" +
-                    "(จุด ● บนหัวจะเปลี่ยนเป็น **online** สีเขียว) แล้วพิมพ์คำสั่งเดิมอีกครั้งได้เลย"));
+                    "🔴 **ยังไม่ได้เชื่อมต่อ MCP**\n\n" +
+                    "เปิดที่ **MCP Bridge → แท็บ Claude In → ▶ Start**\n" +
+                    "จุดสถานะบนหัวจะเปลี่ยนเป็น **online** สีเขียว แล้วพิมพ์อีกครั้งได้เลย"));
                 s.draft = "";
                 s.images.Clear();
                 s.attached.Clear();

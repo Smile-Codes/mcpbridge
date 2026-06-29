@@ -11,11 +11,11 @@ namespace MCPBridge
     /// </summary>
     public static class MarkdownColor
     {
-        // ── Warm palette (เข้าธีม clay #D97757 / พื้น #171411) — สีน้อยโทนเดียวกัน อ่านสบาย ──
-        const string CODE   = "#E8A87F"; // clay-peach — code / script / ไฟล์
-        const string STRONG = "#F2DEC4"; // warm cream — สำคัญ (เด่นด้วยน้ำหนัก ไม่ใช่สีตะโกน)
-        const string HEADER = "#E89066"; // clay สว่าง — หัวข้อ (โทนเดียวกับ accent)
-        const string BULLET = "#A89B8A"; // warm muted — bullet
+        // ── Midnight Indigo palette (เข้าธีม accent #7C6CFF / พื้น #0F1117) — โทนเย็น อ่านคม ──
+        const string CODE   = "#A5B4FC"; // light indigo — code / script / ไฟล์
+        const string STRONG = "#F4F6FA"; // near-white — สำคัญ (เด่นด้วยน้ำหนัก ไม่ใช่สีตะโกน)
+        const string HEADER = "#A99BFF"; // bright indigo — หัวข้อ (โทนเดียวกับ accent)
+        const string BULLET = "#9AA0AD"; // cool muted — bullet
 
         public static string ToRichText(string md)
         {
@@ -59,11 +59,11 @@ namespace MCPBridge
             md = Regex.Replace(md, @"\n(?=<size=14>)", "\n<size=9> </size>\n");
 
             // บรรทัดสถิติ (⏱ ...) ท้ายคำตอบ → เล็ก จาง
-            md = Regex.Replace(md, @"(?m)^⏱ .+$", m => $"<size=9><color=#8A8074>{m.Value}</color></size>");
+            md = Regex.Replace(md, @"(?m)^⏱ .+$", m => $"<size=9><color=#5C6370>{m.Value}</color></size>");
 
-            // ห่อทั้งก้อนด้วยสีฐานธีมอุ่น (#ECE6DC = TEXT_WHITE ของหน้าต่าง)
+            // ห่อทั้งก้อนด้วยสีฐานธีม (#EEF0F4 = TEXT_WHITE ของหน้าต่าง)
             // (tag สีข้างใน เช่น bold/หัวข้อ ยัง override ได้ปกติ)
-            return "<color=#ECE6DC>" + md + "</color>";
+            return "<color=#EEF0F4>" + md + "</color>";
         }
     }
 }

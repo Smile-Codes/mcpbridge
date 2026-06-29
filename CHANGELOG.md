@@ -4,6 +4,18 @@ All notable changes to this package are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **Chat window reskin — "Midnight Indigo" theme.** Replaced the warm clay/brown palette with a
+  cool charcoal base (`#0F1117`), higher-contrast near-white text (`#EEF0F4`), and an indigo-violet
+  accent (`#7C6CFF`) for a modern, more readable, AI-app look. Centralized the palette (added
+  `ACCENT_2`, `DANGER`, `WARN` constants) and swept all scattered inline colors onto it. Markdown
+  rendering (`MarkdownColor.cs`) recolored to match (code → light indigo, headers → bright indigo).
+  Code syntax highlighting (`CodeHighlight.cs`, VS Code Dark+) left as-is — it already suits the cool
+  base. Bumped body font to 14px and fixed the bundled IBM Plex Sans Thai Looped font to resolve by
+  asset name (`AssetDatabase.FindAssets`) instead of a hardcoded `Assets/...` path, so it actually
+  loads when installed as a UPM package (previously fell back to a system font). Refreshed key UI copy
+  (not-connected notice, input placeholder).
+
 ### Added
 - **Apply/Edit Pack** — 8 tools that let the AI act, not just diagnose (new file
   `Editor/MCPHandlers.Edit.cs`):
