@@ -2,7 +2,7 @@
   "mcpServers": {
     "unity": {
       "command": "node",
-      "args": ["./Packages/com.delta.unity-mcp/Server~/index.js"]
+      "args": ["./Packages/com.mcpbridge/Server~/index.js"]
     }
   }
 }

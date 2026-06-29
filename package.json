@@ -1,5 +1,5 @@
 {
-  "name": "com.delta.unity-mcp",
+  "name": "com.mcpbridge",
   "version": "1.0.0",
   "displayName": "MCP Bridge",
   "description": "In-editor AI assistant + MCP bridge for Unity. Create/inspect scene objects, prefabs, materials and terrain from chat; run perf audits (FPS/GC/draw calls/GPU instancing), read console/exceptions/logs, audit textures, and scan code for refactors. Works standalone in any Unity 6 project. Network (Fusion) features degrade gracefully when Fusion is absent.",

@@ -24,13 +24,13 @@ Add to the consuming project's `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.delta.unity-mcp": "file:../../com.delta.unity-mcp"
+    "com.mcpbridge": "file:../../com.mcpbridge"
   }
 }
 ```
 
-Adjust the relative path to wherever this folder lives (e.g. `C:/Work/git/com.delta.unity-mcp`).
-You can also use an absolute path: `"file:C:/Work/git/com.delta.unity-mcp"`.
+Adjust the relative path to wherever this folder lives (e.g. `C:/Work/git/com.mcpbridge`).
+You can also use an absolute path: `"file:C:/Work/git/com.mcpbridge"`.
 
 ### Option B — Embedded package
 
@@ -49,9 +49,9 @@ Copy this whole folder into the project's `Packages/` directory.
    - From that folder run `npm install` once.
    - Copy `Documentation~/.mcp.json.template` to your project root as `.mcp.json`, then set the
      `args` path to this package's `Server~/index.js`:
-     - **Embedded package (Option B):** `./Packages/com.delta.unity-mcp/Server~/index.js`
+     - **Embedded package (Option B):** `./Packages/com.mcpbridge/Server~/index.js`
      - **Local `file:` reference (Option A):** the package stays at its source folder, so use an
-       absolute path, e.g. `C:/Work/git/com.delta.unity-mcp/Server~/index.js`
+       absolute path, e.g. `C:/Work/git/com.mcpbridge/Server~/index.js`
    - In Unity: **MCP Bridge → Server** must be 🟢 ON (auto-starts on Unity open).
 
 ## Notes
