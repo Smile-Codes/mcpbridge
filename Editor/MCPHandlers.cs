@@ -38,7 +38,7 @@ namespace DeltaUnity.MCP
             "/prefab/create", "/prefab/place", "/ui/create", "/terrain/create",
             "/terrain/set-heights", "/script/create", "/ui/optimize",
             "/material/create", "/atlas/create",
-            "/diagnose/exceptions-clear",
+            "/diagnose/exceptions-clear", "/code/run",
             // หมายเหตุ: /watch/add, /watch/clear = READ-ONLY (แค่ sample ค่า field ไม่แก้ scene/game)
             //   → ไม่อยู่ใน WritePaths เพื่อให้ดู runtime value ได้โดยไม่ต้องเปิด Allow Write
         };
@@ -82,7 +82,7 @@ namespace DeltaUnity.MCP
                 { "get_exceptions", "/diagnose/exceptions" },   { "clear_exceptions", "/diagnose/exceptions-clear" },
                 { "diagnose_exceptions", "/diagnose/exceptions" },
                 { "compile", "/compile" },                      { "compile_status", "/compile-status" },
-                { "ping", "/ping" },
+                { "run_csharp", "/code/run" },                  { "ping", "/ping" },
             };
             // overlay จาก commands.json (SINGLE SOURCE ร่วมกับ bridge) — JSON ชนะ baseline
             try
@@ -282,6 +282,7 @@ namespace DeltaUnity.MCP
                 "/watch/get"   => ExecuteOnMainThread(() => RuntimeWatch.GetReport()),
                 "/watch/clear" => ExecuteOnMainThread(() => { RuntimeWatch.ClearAll(); return "{\"cleared\":true}"; }),
                 "/code/refactor-audit" => RefactorAuditCmd(body),
+                "/code/run"          => RunCsharp(body),
                 _ => $"{{\"error\":\"Unknown command: {path}\"}}"
             };
             _sw.Stop();
@@ -291,6 +292,24 @@ namespace DeltaUnity.MCP
 
         // ── Ping ────────────────────────────────────────────────────────────
         static string Ping() => "{\"status\":\"ok\",\"version\":\"1.0\"}";
+
+        // ── Run C# ──────────────────────────────────────────────────────────
+        // Escape hatch: compile + run arbitrary C# against the live Editor/scene via Roslyn
+        // (RuntimeCompiler). Lets the AI do anything Unity exposes when no dedicated tool fits —
+        // build prefabs from models, batch-edit assets, drive the importer, prototype gameplay live.
+        // Put logic in `public static string Run()` (its return value is reported back) or a
+        // MonoBehaviour (auto-attached to a fresh GameObject in the playing scene). Write-gated.
+        static string RunCsharp(string body)
+        {
+            var data = ParseReq<RunCsharpRequest>(body);
+            return ExecuteOnMainThread(() =>
+            {
+                if (string.IsNullOrEmpty(data.code))
+                    return "{\"error\":\"code required — a full C# source file. Put logic in 'public static string Run()' (return value is reported) or a MonoBehaviour (auto-attached in the live scene).\"}";
+                bool ok = RuntimeCompiler.CompileAndRun(data.code, out string log);
+                return $"{{\"ok\":{(ok ? "true" : "false")},\"log\":\"{EscapeJson(log)}\"}}";
+            });
+        }
 
         // ── Scene ───────────────────────────────────────────────────────────
         // ทุก handler ที่แตะ Unity API ต้อง wrap ExecuteOnMainThread
@@ -1173,5 +1192,6 @@ public class {className} : MonoBehaviour
         [Serializable] class CountRequest        { public string type; }
         [Serializable] class HotReloadRequest    { public string action; }
         [Serializable] class WatchAddRequest     { public string objectName; public string component; public string field; }
+        [Serializable] class RunCsharpRequest    { public string code; }
     }
 }

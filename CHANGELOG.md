@@ -2,6 +2,18 @@
 
 All notable changes to this package are documented here.
 
+## [Unreleased]
+
+### Added
+- `unity_run_csharp` tool (`/code/run`) — escape hatch that compiles and runs arbitrary C# against
+  the live Editor/scene via the existing `RuntimeCompiler` (Roslyn). Lets the AI do anything Unity
+  exposes when no dedicated tool fits (build prefabs from imported models, batch-edit assets, drive
+  the importer, prototype gameplay live). Logic goes in `public static string Run()` or a
+  MonoBehaviour; write-gated.
+- Node bridge supports per-command `timeoutMs` and `noRetry` in `commands.json`. `run_csharp` uses
+  `timeoutMs: 60000, noRetry: true` so a slow Roslyn compile isn't retried (which would re-run side
+  effects).
+
 ## [1.0.0] - 2026-06-28
 
 ### Added

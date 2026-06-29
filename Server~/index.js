@@ -49,17 +49,22 @@ function resolvePort() {
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // ── Helper: call Unity Editor (resolve target port + retry + timeout) ──────
-async function callUnity(path_, body = {}) {
+// opts.timeoutMs / opts.maxRetries override the defaults per command (set in commands.json) —
+// long jobs (e.g. run_csharp compiling via Roslyn) need a longer timeout AND maxRetries:1, because
+// retrying a non-idempotent command would re-run its side effects.
+async function callUnity(path_, body = {}, opts = {}) {
+  const timeoutMs  = opts.timeoutMs  ?? TIMEOUT_MS;
+  const maxRetries = opts.maxRetries ?? MAX_RETRIES;
   const port = resolvePort();
   if (port == null)
     return { error: "ไม่พบ Unity instance ที่เปิด MCP server — กด Start ใน Delta AI (ดูด้วย unity_list_instances)" };
   const base = `http://localhost:${port}`;
 
   let lastErr;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch(`${base}${path_}`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -74,7 +79,7 @@ async function callUnity(path_, body = {}) {
       lastErr = err;
       const isTimeout = err.name === "AbortError";
       const reason    = isTimeout ? "timeout" : "connection refused";
-      if (attempt < MAX_RETRIES) {
+      if (attempt < maxRetries) {
         const delay = RETRY_DELAY * attempt;   // backoff: 600, 1200 ms
         console.error(`[MCP] ${reason} (port ${port}) → retry ${attempt}/${MAX_RETRIES - 1} in ${delay}ms`);
         await sleep(delay);
@@ -184,8 +189,10 @@ server.tool("unity_start_instance", "Start (activate) the MCP server on a specif
 // ── Unity tools — register จาก manifest (single source) ทุกตัวยิง callUnity(path) ──
 const _cmds = loadCommands();
 for (const cmd of _cmds) {
+  // per-command overrides (commands.json): timeoutMs for slow jobs, noRetry for non-idempotent ones.
+  const opts = { timeoutMs: cmd.timeoutMs, maxRetries: cmd.noRetry ? 1 : undefined };
   server.tool(cmd.tool, cmd.description, toZodShape(cmd.params), async (args) => {
-    const r = await callUnity(cmd.path, args || {});
+    const r = await callUnity(cmd.path, args || {}, opts);
     return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
   });
 }

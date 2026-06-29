@@ -132,6 +132,9 @@
     } },
     { "tool": "unity_watch_get", "command": "watch_get", "path": "/watch/get", "description": "Get the current sampled values and trend for all active runtime watches. Shows last 10 values per watch with timestamps.", "params": {} },
     { "tool": "unity_watch_clear", "command": "watch_clear", "path": "/watch/clear", "description": "Remove all runtime watches", "params": {} },
-    { "tool": "unity_exceptions", "command": "get_exceptions", "path": "/diagnose/exceptions", "description": "Get recent Unity exceptions and errors (rolling buffer of last 50, deduplicated). Sorted by lastSeen desc. Use to quickly surface runtime exceptions without opening the Console window.", "params": {} }
+    { "tool": "unity_exceptions", "command": "get_exceptions", "path": "/diagnose/exceptions", "description": "Get recent Unity exceptions and errors (rolling buffer of last 50, deduplicated). Sorted by lastSeen desc. Use to quickly surface runtime exceptions without opening the Console window.", "params": {} },
+    { "tool": "unity_run_csharp", "command": "run_csharp", "path": "/code/run", "timeoutMs": 60000, "noRetry": true, "description": "Escape hatch — compile and run arbitrary C# against the live Editor/scene via Roslyn. Use ONLY when no dedicated tool fits: build prefabs from imported models, batch-edit assets, drive the AssetDatabase/importer, or prototype gameplay live. Provide a FULL C# source file in 'code'. Put logic in 'public static string Run()' (its return string is reported back), or define a MonoBehaviour (auto-attached to a new GameObject in the playing scene). All loaded assemblies (UnityEngine, UnityEditor, game asm) are referenced automatically. Requires Write ON. Make scripts idempotent — there is no retry, but rerunning should be safe.", "params": {
+      "code": { "type": "string", "desc": "Full C# source. Logic in 'public static string Run()' (return value reported) or a MonoBehaviour (auto-attached live)." }
+    } }
   ]
 }

@@ -650,6 +650,7 @@ namespace DeltaUnity.MCP
             "/prefab/place"            => "📌  วาง Prefab",
             "/script/create"           => "📝  สร้าง Script",
             "/script/read"             => "📖  อ่าน Script",
+            "/code/run"                => "⚡  Run C# (live)",
             "/ui/create"               => "🖼  สร้าง UI",
             "/ui/optimize"             => "⚡  Optimize UI",
             "/material/create"         => "🎨  สร้าง Material",

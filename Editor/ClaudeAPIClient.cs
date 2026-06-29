@@ -307,6 +307,9 @@ Create Prefab (สร้าง prefab เปล่าใหม่):
 Place Prefab (หยิบ prefab ที่มีอยู่ใน Assets มาวางใน scene — ใช้เมื่อผู้ใช้บอก ""หยิบ/วาง/เอา X มาใส่ scene""):
 {""command"":""place_prefab"",""name"":""P_HumanTrooperSword"",""x"":0,""y"":0,""z"":0}
 
+Run C# (escape hatch — compile+run โค้ด C# สดกับ Editor/scene ผ่าน Roslyn; ใช้เมื่อ ""ไม่มี command อื่นที่ตรง"" เช่น สร้าง prefab จากโมเดลที่ import มา, batch แก้ asset, สั่ง importer. ใส่ไฟล์ C# เต็มใน code — logic ไว้ใน public static string Run() หรือ MonoBehaviour. ทำให้ idempotent):
+{""command"":""run_csharp"",""code"":""using UnityEngine; public static class Job { public static string Run() { return \""done\""; } }""}
+
 Create UI element:
 {""command"":""create_ui"",""name"":""Name"",""type"":""button|text|image|panel"",""x"":0,""y"":0,""width"":160,""height"":40}
 
