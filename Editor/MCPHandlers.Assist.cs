@@ -9,7 +9,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Profiling;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     // Core Assist Pack — ให้ AI "มองเห็น" สถานะจริง + "ลงมือแก้" ของที่มีอยู่
     public static partial class MCPHandlers

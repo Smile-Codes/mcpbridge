@@ -4,7 +4,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// คอยเก็บ RTT (ping) ต่อเนื่องระหว่าง Play → คำนวณ jitter, min/avg/max, ping spike

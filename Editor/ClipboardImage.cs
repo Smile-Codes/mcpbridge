@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// ดึงรูปจาก Windows clipboard (กรณีกด Ctrl+V หรือ Print Screen แล้วยังไม่ได้เซฟไฟล์)

@@ -1,7 +1,7 @@
 using System.IO;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// ย่อรูปก่อนส่งเข้า Claude API เพื่อประหยัด token

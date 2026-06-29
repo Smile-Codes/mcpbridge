@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     public static class ClaudeAPIClient
     {

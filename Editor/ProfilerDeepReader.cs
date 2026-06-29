@@ -7,7 +7,7 @@ using UnityEditor.Profiling;
 using UnityEditorInternal;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// เจาะลึก Profiler call tree เพื่อหา "ตัวการจริง":
@@ -353,7 +353,7 @@ namespace DeltaUnity.MCP
             return (null, null);
         }
 
-        // "Radius.Gameplays.CreepAI.UpdateTarget ()" → "CreepAI.UpdateTarget()"
+        // "MyGame.AI.CreepAI.UpdateTarget ()" → "CreepAI.UpdateTarget()"
         static string ShortMethod(string m)
         {
             if (string.IsNullOrEmpty(m)) return m;

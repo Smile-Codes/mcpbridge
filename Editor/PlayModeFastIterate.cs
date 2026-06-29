@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// เร่งรอบ iterate: เปิด "Enter Play Mode Options" (ปิด Domain + Scene Reload)
@@ -13,7 +13,7 @@ namespace DeltaUnity.MCP
     /// </summary>
     public static class PlayModeFastIterate
     {
-        const string MENU = "Radius/MCP/Fast Play Mode (no domain reload)";
+        const string MENU = "MCP Bridge/Fast Play Mode (no domain reload)";
 
         [MenuItem(MENU, true)]
         static bool Validate()

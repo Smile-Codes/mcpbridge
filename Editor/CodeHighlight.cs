@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// C# syntax highlight → Unity rich text (สำหรับ code block ในแชต)

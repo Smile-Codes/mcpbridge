@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// แปลง markdown ของ Claude เป็น Unity rich text พร้อมสี

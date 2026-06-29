@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// Network pinpoint (Phase 1) — ชี้ว่า NetworkObject/prefab ตัวไหน "sync เปลือง bandwidth" ด้วย byte จริง

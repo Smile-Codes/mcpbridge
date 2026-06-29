@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// Index ไฟล์ .cs ทั้งหมดในโปรเจกต์ สำหรับฟีเจอร์ @mention ในช่องแชต

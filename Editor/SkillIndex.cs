@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// สแกนสกิล/slash-command ที่มีในเครื่อง สำหรับ '/' picker ในแชต (โหมด Subscription/CLI)

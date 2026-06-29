@@ -1,5 +1,5 @@
 {
-  "name": "UnityMCP.Editor",
+  "name": "MCPBridge.Editor",
   "rootNamespace": "",
   "references": [],
   "includePlatforms": ["Editor"],

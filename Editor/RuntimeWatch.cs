@@ -5,7 +5,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// RuntimeWatch — sample field/property ของ GameObject ทุก 0.5s ระหว่าง Play Mode

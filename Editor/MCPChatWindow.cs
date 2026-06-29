@@ -1,4 +1,4 @@
-// MCPChatWindow — Delta AI chat UI
+// MCPChatWindow — MCP Bridge chat UI
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     public class MCPChatWindow : EditorWindow
     {
@@ -156,12 +156,12 @@ namespace DeltaUnity.MCP
         }
 
         // ── Open ──────────────────────────────────────────────────────────
-        [MenuItem("Radius/MCP/Chat _F12")]
-        public static void Open() => GetWindow<MCPChatWindow>("Delta AI").minSize = new Vector2(440, 600);
+        [MenuItem("MCP Bridge/Chat _F12")]
+        public static void Open() => GetWindow<MCPChatWindow>("MCP Bridge").minSize = new Vector2(440, 600);
 
         void OnEnable()
         {
-            titleContent = new GUIContent("Delta AI", TabIcon());   // ไอคอนส้มบน dock tab
+            titleContent = new GUIContent("MCP Bridge", TabIcon());   // ไอคอนส้มบน dock tab
             wantsMouseMove = true;   // ให้ hover effect ใน custom dropdown/ปุ่ม ตอบสนองทันที
             _apiKey = EditorPrefs.GetString("DeltaMCP_ApiKey", "");
             _api.backend = 0;
@@ -212,7 +212,7 @@ namespace DeltaUnity.MCP
         {
             int removed = s.messages.RemoveAll(m => m.Role == "assistant" && (m.Content == THINKING || m.Content == QUEUED));
             if (removed > 0)
-                Debug.Log($"[Delta AI] ลบ bubble 'กำลังคิด' ค้าง {removed} อัน (โดนตัดตอน compile/reload) — พิมพ์ถามใหม่ได้เลย");
+                Debug.Log($"[MCP Bridge] ลบ bubble 'กำลังคิด' ค้าง {removed} อัน (โดนตัดตอน compile/reload) — พิมพ์ถามใหม่ได้เลย");
         }
 
         void LoadHistory(ChatSession s)
@@ -1041,7 +1041,7 @@ namespace DeltaUnity.MCP
             EditorGUILayout.LabelField("Settings", title);
             var sub = new GUIStyle(EditorStyles.label) { fontSize = FONT_SIZE - 1 };
             sub.normal.textColor = TEXT_HINT;
-            EditorGUILayout.LabelField("ตั้งค่า backend · model · พฤติกรรมของ Delta AI", sub);
+            EditorGUILayout.LabelField("ตั้งค่า backend · model · พฤติกรรมของ MCP Bridge", sub);
             EditorGUILayout.Space(12);
 
             SettingsLabel("Backend");
@@ -1206,7 +1206,7 @@ namespace DeltaUnity.MCP
                     thAvSt.normal.textColor = Color.white;
                     GUI.Label(thAv, "✦", thAvSt);
                     var thName = new GUIStyle(_roleClaude) { alignment = TextAnchor.MiddleLeft };
-                    GUI.Label(new Rect(thAv.xMax + 9, thRow.y, 200, thRow.height), "Delta AI", thName);
+                    GUI.Label(new Rect(thAv.xMax + 9, thRow.y, 200, thRow.height), "MCP Bridge", thName);
 
                     // bubble ทรงเดียวกับ assistant (มุม 4/12 + แถบ accent ซ้าย, inset 8 ตรงขอบการ์ด)
                     var rrFull = GUILayoutUtility.GetRect(bubbleWidth, 28);
@@ -1321,7 +1321,7 @@ namespace DeltaUnity.MCP
                     // ชื่อ
                     string roleTag = CurrentRole() == 1 ? "Art" : "Dev";
                     var nameStyle = new GUIStyle(_roleClaude) { alignment = TextAnchor.MiddleLeft };
-                    GUI.Label(new Rect(avR.xMax + 9, hrow.y, bubbleWidth - 200, hrow.height), $"Delta AI  ·  {roleTag}", nameStyle);
+                    GUI.Label(new Rect(avR.xMax + 9, hrow.y, bubbleWidth - 200, hrow.height), $"MCP Bridge  ·  {roleTag}", nameStyle);
                     // ปุ่ม Copy All (ขวาสุด — inset 8 ให้ตรงขอบการ์ด)
                     var copyR = new Rect(hrow.xMax - 70, hrow.y + 3, 58, 18);
                     RBox(copyR, BG_RAISED, BORDER, 6f);
@@ -1329,7 +1329,7 @@ namespace DeltaUnity.MCP
                     if (GUI.Button(copyR, GUIContent.none, GUIStyle.none))
                     {
                         EditorGUIUtility.systemCopyBuffer = displayMsg.DisplayContent;
-                        Debug.Log("[Delta AI] Copied AI response to clipboard.");
+                        Debug.Log("[MCP Bridge] Copied AI response to clipboard.");
                     }
                     // stat (ซ้ายของปุ่ม Copy)
                     if (!string.IsNullOrEmpty(displayMsg.Stat))
@@ -1484,7 +1484,7 @@ namespace DeltaUnity.MCP
                 if (GUI.Button(new Rect(hbar.xMax - 66, hbar.y + 1, 60, 18), "Copy", EditorStyles.miniButton))
                 {
                     EditorGUIUtility.systemCopyBuffer = copyText;
-                    Debug.Log($"[Delta AI] Copied {title} to clipboard.");
+                    Debug.Log($"[MCP Bridge] Copied {title} to clipboard.");
                 }
             }
             // คลิกแถบหัว (ส่วนที่ไม่ใช่ปุ่ม Copy) = พับ/กาง
@@ -2458,7 +2458,7 @@ namespace DeltaUnity.MCP
                 s.messages.Add(new ChatMessage("user", prompt));
                 s.messages.Add(new ChatMessage("assistant",
                     "🔴 **MCP ยังไม่ต่อ** — กดเปิดที่ Unity ก่อนนะครับ\n\n" +
-                    "ไปที่หน้าต่าง **Delta AI → แท็บ \"Claude In\" → กดปุ่ม ▶ Start**\n" +
+                    "ไปที่หน้าต่าง **MCP Bridge → แท็บ \"Claude In\" → กดปุ่ม ▶ Start**\n" +
                     "(จุด ● บนหัวจะเปลี่ยนเป็น **online** สีเขียว) แล้วพิมพ์คำสั่งเดิมอีกครั้งได้เลย"));
                 s.draft = "";
                 s.images.Clear();

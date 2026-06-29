@@ -7,7 +7,7 @@ using System.Threading;
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     [InitializeOnLoad]
     public static class MCPServer
@@ -101,8 +101,8 @@ namespace DeltaUnity.MCP
 
         public static bool IsRunning => _running;
 
-        const string MENU_START = "Radius/MCP/Server/Start";
-        const string MENU_STOP  = "Radius/MCP/Server/Stop";
+        const string MENU_START = "MCP Bridge/Server/Start";
+        const string MENU_STOP  = "MCP Bridge/Server/Stop";
 
         [MenuItem(MENU_START, true)]
         static bool ValidateStart()
@@ -119,7 +119,7 @@ namespace DeltaUnity.MCP
         }
 
         // ── Toggle: อนุญาตคำสั่งที่แก้ scene/asset (default = ปิด = read-only) ──
-        const string MENU_WRITE = "Radius/MCP/Allow Write Commands";
+        const string MENU_WRITE = "MCP Bridge/Allow Write Commands";
 
         [MenuItem(MENU_WRITE, true)]
         static bool ValidateWrite()
@@ -136,7 +136,7 @@ namespace DeltaUnity.MCP
         }
 
         // ── Toggle: log raw CLI stream → ดู format จริงตอน debug ──
-        const string MENU_CLIDEBUG = "Radius/MCP/Debug CLI Stream";
+        const string MENU_CLIDEBUG = "MCP Bridge/Debug CLI Stream";
 
         [MenuItem(MENU_CLIDEBUG, true)]
         static bool ValidateCliDebug()

@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// อ่านค่า Profiler จริงเป็นตัวเลข (ไม่ใช่จากรูป)

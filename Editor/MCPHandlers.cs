@@ -9,12 +9,12 @@ using UnityEngine;
 using UnityEngine.U2D;
 using UnityEngine.UI;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     public static partial class MCPHandlers
     {
         // ── ความปลอดภัย: read-only default + rate limit ──
-        // เปิด/ปิด write ผ่านเมนู Radius/MCP/Allow Write Commands (เก็บใน EditorPrefs)
+        // เปิด/ปิด write ผ่านเมนู MCP Bridge/Allow Write Commands (เก็บใน EditorPrefs)
         // thread-safe: Dispatch ถูกเรียกจาก background (HTTP server / Task.Run) ด้วย
         // → EditorPrefs.GetBool เรียกได้เฉพาะ main thread → cache ค่าไว้ อ่าน background ใช้ cache
         static bool _allowWritesCache;
@@ -224,7 +224,7 @@ namespace DeltaUnity.MCP
             // 2) read-only guard — คำสั่งที่แก้ state ต้องเปิด Allow Write ก่อน
             if (WritePaths.Contains(path) && !AllowWrites)
             {
-                var ro = $"{{\"error\":\"READ-ONLY mode: คำสั่ง '{path}' ถูกบล็อก. เปิดเมนู Radius/MCP/Allow Write Commands ก่อนถึงจะแก้ scene/asset ได้\"}}";
+                var ro = $"{{\"error\":\"READ-ONLY mode: คำสั่ง '{path}' ถูกบล็อก. เปิดเมนู MCP Bridge/Allow Write Commands ก่อนถึงจะแก้ scene/asset ได้\"}}";
                 AppendLog(path, body, ro, 0);
                 return ro;
             }

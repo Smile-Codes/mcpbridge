@@ -5,7 +5,7 @@ using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// คอยจับ FPS drop / frame spike อัตโนมัติระหว่าง Play Mode (ไม่ต้องกดเอง)

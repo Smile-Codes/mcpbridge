@@ -3,7 +3,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// A3: อ่านเนื้อใน prefab — โครงสร้าง GameObject + component สำคัญ

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// เรียก Claude ผ่าน Claude Code CLI (print mode: `claude -p`)

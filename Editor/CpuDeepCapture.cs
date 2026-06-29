@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// Deep capture "ชั่วคราว" (time-boxed) — เจาะลึก CPU + GC + Network ในรอบเดียว

@@ -9,7 +9,7 @@ using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// Live Code — compile C# ตอน runtime ด้วย Roslyn (csc ที่มากับ Unity) แล้วโหลด assembly ใหม่
@@ -180,7 +180,7 @@ public static class Probe
     public static string Run() => ""scene objects = "" + Object.FindObjectsOfType<Transform>().Length;
 }";
 
-        [MenuItem("Radius/MCP/Live Code (Roslyn)")]
+        [MenuItem("MCP Bridge/Live Code (Roslyn)")]
         public static void Open()
         {
             var w = GetWindow<RuntimeCompilerWindow>("Live Code");

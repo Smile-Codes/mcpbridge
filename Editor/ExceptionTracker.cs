@@ -4,7 +4,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// ExceptionTracker — บันทึก Exception/Error ที่เกิดขึ้น (rolling buffer 50 entries)

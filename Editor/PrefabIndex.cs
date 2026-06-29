@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// Index แบบ reverse: script GUID → prefab ที่ใช้ script นั้น (MonoBehaviour แปะอยู่)

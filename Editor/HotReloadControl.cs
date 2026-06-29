@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// คุม Hot Reload (SingularityGroup) ผ่าน reflection — ไม่ต้องผูก asmdef กับ package

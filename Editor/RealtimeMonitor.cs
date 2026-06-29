@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using Debug = UnityEngine.Debug;
 
-namespace DeltaUnity.MCP
+namespace MCPBridge
 {
     /// <summary>
     /// ตรวจสุขภาพ Unity แบบ real-time บน background thread (ไม่แตะ main thread / ไม่เรียก AI)
