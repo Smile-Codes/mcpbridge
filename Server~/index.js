@@ -113,6 +113,7 @@ function toZodShape(params) {
       case "boolean":  zt = z.boolean(); break;
       case "enum":     zt = z.enum(p.values); break;
       case "number[]": zt = z.array(z.number()); break;
+      case "object[]": zt = z.array(z.record(z.any())); break;   // batch sub-commands
       default:         zt = z.string();
     }
     if (p.desc) zt = zt.describe(p.desc);

@@ -5,6 +5,36 @@ All notable changes to this package are documented here.
 ## [Unreleased]
 
 ### Added
+- **Apply/Edit Pack** — 8 tools that let the AI act, not just diagnose (new file
+  `Editor/MCPHandlers.Edit.cs`):
+  - `unity_edit_script` (`/script/edit`) — targeted find/replace on an existing `.cs` file (the
+    fix/refactor primitive; no whole-file rewrite). Write-gated, `noRetry`.
+  - `unity_assign_reference` (`/object/assign-reference`) — assign an object/asset reference into a
+    component's serialized field (what `set_property` can't do). Picks the matching component on the
+    target by field type. Write-gated.
+  - `unity_run_batch` (`/batch`) — run up to 50 commands in one round-trip; each sub-command still
+    passes the write-gate but skips the rate limit (counts as one user action). Write-gated.
+  - `unity_delete_asset` (`/asset/delete`) — move an asset file to the OS trash (recoverable);
+    refuses folders, third-party paths, and anything outside `Assets/`. Write-gated.
+  - `unity_set_import_settings` (`/asset/import-settings`) — apply texture importer changes
+    (maxSize/compression/readable/mipmaps/crunch); the fix that pairs with `audit_textures`.
+    Write-gated.
+  - `unity_capture_screenshot` (`/view/screenshot`) — render the Game/Scene camera to a PNG and
+    return its path (verify results visually). Read-only.
+  - `unity_build_player` (`/build/player`) — build a standalone/mobile player via `BuildPipeline`
+    (blocking; switches active target if needed). Write-gated, long `timeoutMs`, `noRetry`.
+  - `unity_git_status` (`/git/status`) — branch + porcelain working-tree changes before suggesting a
+    commit. Read-only.
+- **Test Runner integration** — `unity_run_tests` (`/tests/run`) + `unity_get_test_results`
+  (`/tests/results`) drive the Unity Test Runner (EditMode/PlayMode, optional name filter). Results
+  are async, so `run_tests` starts a run and `get_test_results` polls until `status:done`; progress is
+  persisted in `SessionState` so it survives the PlayMode domain reload. Lives in a **separate optional
+  assembly** `MCPBridge.Editor.TestRunner` (`Editor/TestRunner/`) that references
+  `UnityEditor.TestRunner`; if `com.unity.test-framework` is absent only that assembly is skipped (the
+  main 54 tools are unaffected) and the routes return a helpful error. The main assembly wires in via
+  nullable `MCPHandlers.RunTestsHandler` / `GetTestResultsHandler` delegates set at load.
+- `Dispatch` gained a `rateLimited` flag so batch sub-commands bypass the per-second cap.
+- Node bridge `toZodShape` supports an `object[]` param type (for `run_batch`'s `commands` array).
 - `unity_run_csharp` tool (`/code/run`) — escape hatch that compiles and runs arbitrary C# against
   the live Editor/scene via the existing `RuntimeCompiler` (Roslyn). Lets the AI do anything Unity
   exposes when no dedicated tool fits (build prefabs from imported models, batch-edit assets, drive

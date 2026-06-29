@@ -135,6 +135,51 @@
     { "tool": "unity_exceptions", "command": "get_exceptions", "path": "/diagnose/exceptions", "description": "Get recent Unity exceptions and errors (rolling buffer of last 50, deduplicated). Sorted by lastSeen desc. Use to quickly surface runtime exceptions without opening the Console window.", "params": {} },
     { "tool": "unity_run_csharp", "command": "run_csharp", "path": "/code/run", "timeoutMs": 60000, "noRetry": true, "description": "Escape hatch — compile and run arbitrary C# against the live Editor/scene via Roslyn. Use ONLY when no dedicated tool fits: build prefabs from imported models, batch-edit assets, drive the AssetDatabase/importer, or prototype gameplay live. Provide a FULL C# source file in 'code'. Put logic in 'public static string Run()' (its return string is reported back), or define a MonoBehaviour (auto-attached to a new GameObject in the playing scene). All loaded assemblies (UnityEngine, UnityEditor, game asm) are referenced automatically. Requires Write ON. Make scripts idempotent — there is no retry, but rerunning should be safe.", "params": {
       "code": { "type": "string", "desc": "Full C# source. Logic in 'public static string Run()' (return value reported) or a MonoBehaviour (auto-attached live)." }
-    } }
+    } },
+    { "tool": "unity_edit_script", "command": "edit_script", "path": "/script/edit", "noRetry": true, "description": "Apply a targeted find/replace edit to an EXISTING project .cs file — the way to fix bugs/refactor without rewriting the whole file. Read the file with unity_read_script first to copy the exact text. After editing, call unity_compile then poll unity_compile_status until ready. Requires Write ON.", "params": {
+      "name": { "type": "string", "opt": true, "desc": "Script name (e.g. PlayerController) — resolved via the codebase index" },
+      "path": { "type": "string", "opt": true, "desc": "Or the asset path directly, e.g. Assets/Scripts/PlayerController.cs (takes precedence over name)" },
+      "find": { "type": "string", "desc": "Exact existing text to replace (include enough surrounding lines to be unique)" },
+      "replace": { "type": "string", "opt": true, "desc": "Replacement text (empty to delete the matched text)" },
+      "all": { "type": "boolean", "opt": true, "default": false, "desc": "Replace every occurrence; otherwise the match must be unique" }
+    } },
+    { "tool": "unity_assign_reference", "command": "assign_reference", "path": "/object/assign-reference", "description": "Assign an object/asset REFERENCE to a component field (what set_property can't do — it only handles primitives). Wires e.g. a GameObject/Component target or a prefab/material asset into a serialized object-reference field. Requires Write ON.", "params": {
+      "name": { "type": "string", "desc": "GameObject name in the active scene that holds the component" },
+      "component": { "type": "string", "opt": true, "desc": "Component type name; empty = Transform" },
+      "property": { "type": "string", "desc": "Object-reference field name on the component" },
+      "target": { "type": "string", "desc": "Scene GameObject name, OR an asset name/path. The right component on the target is picked to match the field type." },
+      "asset": { "type": "boolean", "opt": true, "default": false, "desc": "Force resolving 'target' as a project asset (not a scene object)" }
+    } },
+    { "tool": "unity_run_batch", "command": "run_batch", "path": "/batch", "timeoutMs": 30000, "noRetry": true, "description": "Run multiple Unity commands in one call (build a whole scene/setup in a single round-trip). Each item is a normal command object and goes through the same write-gate/rate-limit. Max 50. Returns per-item ok/result. Requires Write ON.", "params": {
+      "commands": { "type": "object[]", "desc": "Array of command objects, e.g. [{\"command\":\"create_gameobject\",\"name\":\"A\",\"primitive\":\"cube\"},{\"command\":\"set_transform\",\"name\":\"A\",\"set\":\"pos\",\"px\":2}]" }
+    } },
+    { "tool": "unity_delete_asset", "command": "delete_asset", "path": "/asset/delete", "noRetry": true, "description": "Delete a project asset FILE (moves it to the OS trash — recoverable). Refuses folders, third-party/plugin paths, and anything outside Assets/. Requires Write ON.", "params": {
+      "path": { "type": "string", "desc": "Asset path under Assets/, e.g. Assets/Prefabs/Old.prefab" }
+    } },
+    { "tool": "unity_set_import_settings", "command": "set_import_settings", "path": "/asset/import-settings", "noRetry": true, "description": "Change a texture's import settings (the fix that pairs with unity_audit_textures — apply its recommendations). Only the fields you pass are changed, then the asset is reimported. Requires Write ON.", "params": {
+      "path": { "type": "string", "desc": "Texture asset path, e.g. Assets/Art/icon.png" },
+      "maxSize": { "type": "number", "opt": true, "desc": "Max texture size (e.g. 512, 1024, 2048); 0 = leave unchanged" },
+      "compression": { "type": "string", "opt": true, "desc": "none | low | normal | high" },
+      "readable": { "type": "string", "opt": true, "desc": "'true'/'false' — Read/Write Enabled (false saves 2x memory)" },
+      "mipmaps": { "type": "string", "opt": true, "desc": "'true'/'false' — Generate Mip Maps" },
+      "crunch": { "type": "string", "opt": true, "desc": "'true'/'false' — Crunch compression (smaller on disk)" }
+    } },
+    { "tool": "unity_capture_screenshot", "command": "capture_screenshot", "path": "/view/screenshot", "description": "Render the Game or Scene camera to a PNG on disk and return its file path — use to SEE the actual result after a change (great for Art/UI verification). Read-only.", "params": {
+      "view": { "type": "enum", "values": ["game","scene"], "opt": true, "default": "game", "desc": "Which camera to capture" },
+      "width": { "type": "number", "opt": true, "default": 1280, "desc": "Output width (64..4096)" },
+      "height": { "type": "number", "opt": true, "default": 720, "desc": "Output height (64..4096)" }
+    } },
+    { "tool": "unity_build_player", "command": "build_player", "path": "/build/player", "timeoutMs": 600000, "noRetry": true, "description": "Build a standalone/mobile player via BuildPipeline. Blocking and can take minutes (the bridge may time out while the build continues). Uses enabled Build Settings scenes unless 'scenes' is given. Switches the active build target if needed. Requires Write ON.", "params": {
+      "path": { "type": "string", "desc": "Output path, e.g. Builds/win/Game.exe (or a folder for some targets)" },
+      "target": { "type": "string", "opt": true, "desc": "win64 | win32 | android | ios | webgl | mac | linux64; empty = current active target" },
+      "scenes": { "type": "string", "opt": true, "desc": "Override scene list, paths separated by ';' (default: enabled Build Settings scenes)" },
+      "dev": { "type": "boolean", "opt": true, "default": false, "desc": "Development build (debug symbols, profiler)" }
+    } },
+    { "tool": "unity_git_status", "command": "git_status", "path": "/git/status", "description": "Show the project's git branch and working-tree changes (porcelain) — use to see what was modified before suggesting a commit. Read-only.", "params": {} },
+    { "tool": "unity_run_tests", "command": "run_tests", "path": "/tests/run", "noRetry": true, "description": "Start a Unity Test Runner run and return immediately (results are async — poll unity_get_test_results until status='done'). EditMode by default; PlayMode enters play. Requires the com.unity.test-framework package. Requires Write ON.", "params": {
+      "mode": { "type": "enum", "values": ["edit","play"], "opt": true, "default": "edit", "desc": "EditMode (fast, no play) or PlayMode (enters play, slower)" },
+      "filter": { "type": "string", "opt": true, "desc": "Optional test-name regex (groupNames) to run a subset, e.g. 'MyNamespace.Combat.*'" }
+    } },
+    { "tool": "unity_get_test_results", "command": "get_test_results", "path": "/tests/results", "description": "Poll the latest Unity Test Runner results: status (idle/running/done), pass/fail/skip/total counts, and the list of failed tests with messages. Call repeatedly after unity_run_tests until status='done'. Read-only.", "params": {} }
   ]
 }

@@ -39,6 +39,10 @@ namespace MCPBridge
             "/terrain/set-heights", "/script/create", "/ui/optimize",
             "/material/create", "/atlas/create",
             "/diagnose/exceptions-clear", "/code/run",
+            // Apply/Edit Pack — แก้ของจริง (write-gated)
+            "/script/edit", "/object/assign-reference", "/batch",
+            "/asset/delete", "/asset/import-settings", "/build/player",
+            "/tests/run",   // เริ่มรันเทสต์ = action (playmode เข้าจริง) — /tests/results เป็น read-only
             // หมายเหตุ: /watch/add, /watch/clear = READ-ONLY (แค่ sample ค่า field ไม่แก้ scene/game)
             //   → ไม่อยู่ใน WritePaths เพื่อให้ดู runtime value ได้โดยไม่ต้องเปิด Allow Write
         };
@@ -83,6 +87,12 @@ namespace MCPBridge
                 { "diagnose_exceptions", "/diagnose/exceptions" },
                 { "compile", "/compile" },                      { "compile_status", "/compile-status" },
                 { "run_csharp", "/code/run" },                  { "ping", "/ping" },
+                // Apply/Edit Pack
+                { "edit_script", "/script/edit" },              { "assign_reference", "/object/assign-reference" },
+                { "run_batch", "/batch" },                      { "delete_asset", "/asset/delete" },
+                { "set_import_settings", "/asset/import-settings" }, { "capture_screenshot", "/view/screenshot" },
+                { "build_player", "/build/player" },            { "git_status", "/git/status" },
+                { "run_tests", "/tests/run" },                  { "get_test_results", "/tests/results" },
             };
             // overlay จาก commands.json (SINGLE SOURCE ร่วมกับ bridge) — JSON ชนะ baseline
             try
@@ -203,11 +213,20 @@ namespace MCPBridge
         static string TruncLog(string s, int max) =>
             s == null ? "" : s.Length > max ? s.Substring(0, max) + "…" : s;
 
-        public static string Dispatch(string path, string body)
+        // ── Optional Test Runner hooks ──────────────────────────────────────
+        //   set by MCPBridge.Editor.TestRunner (separate assembly) at load time. null = the
+        //   com.unity.test-framework package isn't installed → route returns a helpful error.
+        public static Func<string, string> RunTestsHandler;
+        public static Func<string, string> GetTestResultsHandler;
+
+        // rateLimited=false → ข้าม rate-limit (ใช้โดย run_batch ที่นับเป็น 1 action ของผู้ใช้
+        //   แต่ยิง sub-command หลายตัวรวดเดียว — ยังผ่าน write-guard ปกติทุกตัว)
+        public static string Dispatch(string path, string body, bool rateLimited = true)
         {
             path = ResolvePath(path);   // normalize: รับ command-name ("scene_hierarchy") หรือ path ตรง
 
             // 1) rate limit — บล็อกถ้ายิงเกิน N คำสั่งใน 1 วินาที
+            if (rateLimited)
             lock (_rlLock)
             {
                 var now = DateTime.UtcNow;
@@ -283,6 +302,19 @@ namespace MCPBridge
                 "/watch/clear" => ExecuteOnMainThread(() => { RuntimeWatch.ClearAll(); return "{\"cleared\":true}"; }),
                 "/code/refactor-audit" => RefactorAuditCmd(body),
                 "/code/run"          => RunCsharp(body),
+                // ── Apply/Edit Pack (ลงมือแก้ของจริง) ──
+                "/script/edit"             => EditScript(body),
+                "/object/assign-reference" => AssignReference(body),
+                "/batch"                   => RunBatch(body),
+                "/asset/delete"            => DeleteAsset(body),
+                "/asset/import-settings"   => SetImportSettings(body),
+                "/view/screenshot"         => CaptureScreenshot(body),
+                "/build/player"            => BuildPlayer(body),
+                "/git/status"              => GitStatus(body),
+                "/tests/run"               => RunTestsHandler != null ? RunTestsHandler(body)
+                                              : "{\"error\":\"Test Runner ไม่พร้อม — ติดตั้ง package com.unity.test-framework ก่อน (assembly MCPBridge.Editor.TestRunner จะโหลดเอง)\"}",
+                "/tests/results"           => GetTestResultsHandler != null ? GetTestResultsHandler(body)
+                                              : "{\"error\":\"Test Runner ไม่พร้อม — ติดตั้ง package com.unity.test-framework ก่อน\"}",
                 _ => $"{{\"error\":\"Unknown command: {path}\"}}"
             };
             _sw.Stop();

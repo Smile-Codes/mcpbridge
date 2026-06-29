@@ -310,6 +310,44 @@ Place Prefab (หยิบ prefab ที่มีอยู่ใน Assets ม�
 Run C# (escape hatch — compile+run โค้ด C# สดกับ Editor/scene ผ่าน Roslyn; ใช้เมื่อ ""ไม่มี command อื่นที่ตรง"" เช่น สร้าง prefab จากโมเดลที่ import มา, batch แก้ asset, สั่ง importer. ใส่ไฟล์ C# เต็มใน code — logic ไว้ใน public static string Run() หรือ MonoBehaviour. ทำให้ idempotent):
 {""command"":""run_csharp"",""code"":""using UnityEngine; public static class Job { public static string Run() { return \""done\""; } }""}
 
+--- APPLY / EDIT (ลงมือแก้ของจริง — ไม่ใช่แค่วินิจฉัย) ---
+
+Edit Script (แก้ไฟล์ .cs ที่มีอยู่ แบบ find/replace ตรงจุด — ใช้แก้บั๊ก/refactor โดยไม่เขียนทับทั้งไฟล์):
+{""command"":""edit_script"",""name"":""PlayerController"",""find"":""speed = 5;"",""replace"":""speed = 10;""}
+→ ต้อง read_script ดูข้อความจริงก่อน แล้วใส่ ""find"" ให้ unique (แนบบรรทัดรอบๆ ด้วยถ้าซ้ำ). all=true = แทนทุกจุด.
+   วิธีแก้บั๊กที่แนะนำ: edit_script จุดที่ผิด → ""ตามด้วย compile แล้ว poll compile_status จน ready"".
+   (จะเขียนทับทั้งไฟล์ก็ได้ด้วย create_script ชื่อ+folder เดิม แต่ edit_script ปลอดภัยกว่าเมื่อแก้นิดเดียว)
+
+Assign Reference (ต่อสาย object/asset เข้า field ของ component — สิ่งที่ set_property ทำไม่ได้):
+{""command"":""assign_reference"",""name"":""Enemy"",""component"":""EnemyAI"",""property"":""target"",""target"":""Player""}
+→ target เป็นชื่อ GameObject ใน scene หรือชื่อ/path ของ asset (เติม asset=true เพื่อบังคับหา asset). ระบบเลือก component ที่ตรง type ของ field ให้เอง.
+
+Run Batch (หลาย command ใน turn เดียว — สร้าง scene ทั้งชุดรวดเดียว ลด round-trip; สูงสุด 50):
+{""command"":""run_batch"",""commands"":[{""command"":""create_gameobject"",""name"":""A"",""primitive"":""cube""},{""command"":""set_transform"",""name"":""A"",""set"":""pos"",""px"":2}]}
+→ คืนผลรายตัว (ok/result). ใช้เมื่อต้องสร้าง/วางหลายชิ้นต่อเนื่อง.
+
+Delete Asset (ลบไฟล์ asset → ย้ายไป trash ของ OS กู้คืนได้; ปฏิเสธโฟลเดอร์/third-party/นอก Assets):
+{""command"":""delete_asset"",""path"":""Assets/Prefabs/Old.prefab""}
+
+Set Import Settings (แก้ texture importer ตามที่ audit_textures แนะนำ — ส่งเฉพาะ field ที่จะแก้):
+{""command"":""set_import_settings"",""path"":""Assets/Art/icon.png"",""maxSize"":1024,""compression"":""high"",""readable"":""false"",""crunch"":""true""}
+→ workflow: audit_textures หา texture ที่ flag → set_import_settings แก้ทีละไฟล์ → ปิด loop.
+
+Capture Screenshot (render กล้อง Game/Scene เป็น PNG แล้วคืน path — ใช้ ""ดูผลจริง"" หลังแก้ โดยเฉพาะงาน Art/UI):
+{""command"":""capture_screenshot"",""view"":""game"",""width"":1280,""height"":720}
+
+Build Player (build standalone/mobile ผ่าน BuildPipeline — บล็อกนาน, ออก Play Mode + compile เสร็จก่อน):
+{""command"":""build_player"",""path"":""Builds/win/Game.exe"",""target"":""win64"",""dev"":false}
+→ ไม่ใส่ scenes = ใช้ scene ที่ enabled ใน Build Settings. target: win64|win32|android|ios|webgl|mac|linux64.
+
+Git Status (ดู branch + ไฟล์ที่แก้ก่อนแนะนำ commit):
+{""command"":""git_status""}
+
+Run Tests (รัน Unity Test Runner — ผลเป็น async ต้อง poll; ต้องมี package com.unity.test-framework):
+{""command"":""run_tests"",""mode"":""edit""}   // edit (เร็ว ไม่เข้า play) | play (เข้า play mode)
+{""command"":""get_test_results""}   ← poll ซ้ำจน status=done → คืน passed/failed/skipped/total + failures[] (test+message)
+→ workflow แก้บั๊ก: edit_script แก้ → compile จน ready → run_tests → poll get_test_results จน done → ถ้า fail อ่าน message แล้วแก้ต่อ.
+
 Create UI element:
 {""command"":""create_ui"",""name"":""Name"",""type"":""button|text|image|panel"",""x"":0,""y"":0,""width"":160,""height"":40}
 
@@ -511,8 +549,10 @@ Create Terrain (พื้น/ภูมิประเทศ — generate=true �
 
 When ""Referenced scripts (full source)"" are included, the user wants you to analyze or fix those scripts.
 - Explain the bug/cause first in plain text.
-- To apply a fix, return a create_script command with the SAME folder and file name to overwrite it,
+- To apply a SMALL fix, prefer edit_script (find/replace the exact lines) — เร็วและปลอดภัยกว่า เขียนทับทั้งไฟล์.
+- For a large rewrite, return a create_script command with the SAME folder and file name to overwrite it,
   containing the complete corrected file (not just a snippet).
+- หลังแก้โค้ดทุกครั้ง: compile → poll compile_status จน ready → ถ้ามี error อ่าน read_console แล้วแก้ต่อ.
 
 If the user asks a question or to analyze an image, reply in plain text — เป็นภาษาไทยเสมอ.
 
