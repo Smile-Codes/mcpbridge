@@ -135,24 +135,6 @@ namespace MCPBridge
             Debug.Log($"[MCP] Write commands {(MCPHandlers.AllowWrites ? "ENABLED" : "disabled (read-only)")}");
         }
 
-        // ── Toggle: log raw CLI stream → ดู format จริงตอน debug ──
-        const string MENU_CLIDEBUG = "MCP Bridge/Debug CLI Stream";
-
-        [MenuItem(MENU_CLIDEBUG, true)]
-        static bool ValidateCliDebug()
-        {
-            Menu.SetChecked(MENU_CLIDEBUG, EditorPrefs.GetBool("DeltaMCP_CliDebug", false));
-            return true;
-        }
-
-        [MenuItem(MENU_CLIDEBUG)]
-        static void ToggleCliDebug()
-        {
-            bool v = !EditorPrefs.GetBool("DeltaMCP_CliDebug", false);
-            EditorPrefs.SetBool("DeltaMCP_CliDebug", v);
-            Debug.Log($"[MCP] CLI stream debug {(v ? "ON — ดู [MCP stream] ใน Console" : "OFF")}");
-        }
-
         [MenuItem(MENU_START)]
         public static void Start()
         {
