@@ -333,9 +333,9 @@ namespace MCPBridge
                 "/view/screenshot"         => CaptureScreenshot(body),
                 "/build/player"            => BuildPlayer(body),
                 "/git/status"              => GitStatus(body),
-                "/tests/run"               => RunTestsHandler != null ? RunTestsHandler(body)
+                "/tests/run"               => RunTestsHandler != null ? ExecuteOnMainThread(() => RunTestsHandler(body))
                                               : "{\"error\":\"Test Runner ไม่พร้อม — ติดตั้ง package com.unity.test-framework ก่อน (assembly MCPBridge.Editor.TestRunner จะโหลดเอง)\"}",
-                "/tests/results"           => GetTestResultsHandler != null ? GetTestResultsHandler(body)
+                "/tests/results"           => GetTestResultsHandler != null ? ExecuteOnMainThread(() => GetTestResultsHandler(body))
                                               : "{\"error\":\"Test Runner ไม่พร้อม — ติดตั้ง package com.unity.test-framework ก่อน\"}",
                 _ => $"{{\"error\":\"Unknown command: {path}\"}}"
             };
