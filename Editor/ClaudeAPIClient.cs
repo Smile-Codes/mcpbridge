@@ -346,6 +346,24 @@ Build Player (build standalone/mobile ผ่าน BuildPipeline — บล็�
 Git Status (ดู branch + ไฟล์ที่แก้ก่อนแนะนำ commit):
 {""command"":""git_status""}
 
+--- OFFLINE PACK (ScriptableObject / spatial query / console_alert) ---
+
+ScriptableObject — อ่าน/แก้ค่าใน asset (config/balance/data ของเกม offline):
+{""command"":""read_scriptableobject"",""name"":""HeroConfig""}                       // ดู property + ค่าปัจจุบัน
+{""command"":""edit_scriptableobject"",""name"":""HeroConfig"",""property"":""maxHp"",""value"":""1200""}   // แก้ (ค่า primitive เหมือน set_property)
+
+Raycast — ยิง ray หา collider (debug combat/targeting):
+{""command"":""raycast"",""ox"":0,""oy"":1,""oz"":0,""dx"":0,""dy"":0,""dz"":1,""maxDistance"":50}   // หรือใส่ target tx,ty,tz แทน dir · all=true = คืนทุก hit · layers=""Enemy,Wall""
+Overlap — หา collider ในรัศมี (AoE/aggro/pickup):
+{""command"":""overlap"",""cx"":0,""cy"":0,""cz"":0,""radius"":5,""layers"":""Enemy""}
+NavMesh path — เส้นทาง 2 จุด (debug AI เดินไม่ถึง/ติด):
+{""command"":""navmesh_path"",""fx"":0,""fy"":0,""fz"":0,""tx"":10,""ty"":0,""tz"":10}   // status Partial/Invalid = ไปไม่ถึง
+
+console_alert — ดัก log ตรง pattern แล้วนับ (เหมือน watch_alert แต่กับ console — จับ error ที่เลื่อนหาย):
+{""command"":""console_alert"",""pattern"":""NullReference"",""level"":""error""}   // level: all|warning|error
+{""command"":""console_alert_get""}    ← ดูจำนวน + ข้อความล่าสุดที่ตรง
+{""command"":""console_alert_clear""}
+
 Run Tests (รัน Unity Test Runner — ผลเป็น async ต้อง poll; ต้องมี package com.unity.test-framework):
 {""command"":""run_tests"",""mode"":""edit""}   // edit (เร็ว ไม่เข้า play) | play (เข้า play mode)
 {""command"":""get_test_results""}   ← poll ซ้ำจน status=done → คืน passed/failed/skipped/total + failures[] (test+message)

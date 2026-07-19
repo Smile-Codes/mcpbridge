@@ -5,6 +5,19 @@ All notable changes to this package are documented here.
 ## [Unreleased]
 
 ### Added
+- **Offline pack** — tools aimed at single-player/offline work (`Editor/MCPHandlers.Offline.cs`,
+  `Editor/ConsoleAlert.cs`):
+  - `read_scriptableobject` / `edit_scriptableobject` (`/asset/so-read`, `/asset/so-edit`) — read and
+    tune serialized values on a ScriptableObject asset (config / balance / game data). Edit is
+    write-gated; primitive value format matches `set_property`.
+  - `raycast` (`/scene/raycast`) — cast a physics ray (direction or target point) and report hits
+    (object, layer, distance, point, normal). Debug combat/targeting.
+  - `overlap` (`/scene/overlap`) — colliders within a sphere (AoE/aggro/pickup).
+  - `navmesh_path` (`/scene/navmesh-path`) — compute a NavMesh path between two points; status +
+    corners + distance. Debug AI that can't reach / gets stuck.
+  - `console_alert` / `console_alert_get` / `console_alert_clear` (`/console/alert*`) — watch the
+    console for messages matching a substring (optionally min severity) and count them + keep the
+    last few; like `watch_alert` but for `Debug.Log`. Catches errors that scroll away during play.
 - **Runtime-inspection tools (Play Mode companions to RuntimeWatch).**
   - `watch_alert` (`/watch/alert`) — a watch with a condition (`lt`/`lte`/`gt`/`gte`/`eq`/`ne` against a
     value, or `changed`); on the rising edge it logs a warning and bumps a counter (surfaced in

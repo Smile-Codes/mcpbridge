@@ -149,6 +149,39 @@
     } },
     { "tool": "unity_event_log_get", "command": "event_log_get", "path": "/event/log-get", "description": "Get the recent physics events captured by event_log probes (newest first): time, kind (collisionEnter/Exit, triggerEnter/Exit), self, other.", "params": {} },
     { "tool": "unity_event_log_clear", "command": "event_log_clear", "path": "/event/log-clear", "description": "Detach all event_log probes and clear the captured event buffer.", "params": {} },
+    { "tool": "unity_read_scriptableobject", "command": "read_scriptableobject", "path": "/asset/so-read", "description": "Read the serialized values of a ScriptableObject asset (config / balance / game data). Use before edit_scriptableobject to see exact property names.", "params": {
+      "path": { "type": "string", "opt": true, "desc": "Asset path, e.g. Assets/Data/HeroConfig.asset" },
+      "name": { "type": "string", "opt": true, "desc": "Or the asset name to search for (t:ScriptableObject)" }
+    } },
+    { "tool": "unity_edit_scriptableobject", "command": "edit_scriptableobject", "path": "/asset/so-edit", "description": "Set a serialized property on a ScriptableObject asset (tune balance/config data). Primitive values only (number/bool/text/enum, 'x,y,z' Vector3, '#RRGGBB' Color) — same value format as set_property. Requires Write ON.", "params": {
+      "path": { "type": "string", "opt": true, "desc": "Asset path, e.g. Assets/Data/HeroConfig.asset" },
+      "name": { "type": "string", "opt": true, "desc": "Or the asset name to search for" },
+      "property": { "type": "string", "desc": "Property name or display name, e.g. maxHp" },
+      "value": { "type": "string", "desc": "Value as string" }
+    } },
+    { "tool": "unity_raycast", "command": "raycast", "path": "/scene/raycast", "description": "Cast a physics ray and report what it hits (object, layer, distance, point, normal) — debug combat/targeting ('why doesn't it hit / hits the wrong thing'). Give a direction (dx,dy,dz) or a target point (tx,ty,tz). Works in edit or play if colliders exist.", "params": {
+      "ox": { "type": "number", "opt": true, "default": 0 }, "oy": { "type": "number", "opt": true, "default": 0 }, "oz": { "type": "number", "opt": true, "default": 0 },
+      "dx": { "type": "number", "opt": true, "default": 0 }, "dy": { "type": "number", "opt": true, "default": 0 }, "dz": { "type": "number", "opt": true, "default": 0 },
+      "tx": { "type": "number", "opt": true, "default": 0 }, "ty": { "type": "number", "opt": true, "default": 0 }, "tz": { "type": "number", "opt": true, "default": 0 },
+      "maxDistance": { "type": "number", "opt": true, "default": 1000, "desc": "Max ray length" },
+      "all": { "type": "boolean", "opt": true, "default": false, "desc": "Return all hits (sorted) instead of the first" },
+      "layers": { "type": "string", "opt": true, "desc": "Comma-separated layer names to include; omit = all layers" }
+    } },
+    { "tool": "unity_overlap", "command": "overlap", "path": "/scene/overlap", "description": "Find colliders within a sphere (center + radius) — 'what's near this point' for AoE/aggro/pickup debugging. Returns object names, layers, and distance from center.", "params": {
+      "cx": { "type": "number", "opt": true, "default": 0 }, "cy": { "type": "number", "opt": true, "default": 0 }, "cz": { "type": "number", "opt": true, "default": 0 },
+      "radius": { "type": "number", "desc": "Sphere radius" },
+      "layers": { "type": "string", "opt": true, "desc": "Comma-separated layer names to include; omit = all" }
+    } },
+    { "tool": "unity_navmesh_path", "command": "navmesh_path", "path": "/scene/navmesh-path", "description": "Compute a NavMesh path between two points — debug AI that can't reach / gets stuck. Returns status (PathComplete/Partial/Invalid), corner count, total distance, and the corner list. Partial/Invalid means unreachable (point off the NavMesh, a gap, or a blocked area).", "params": {
+      "fx": { "type": "number", "opt": true, "default": 0 }, "fy": { "type": "number", "opt": true, "default": 0 }, "fz": { "type": "number", "opt": true, "default": 0 },
+      "tx": { "type": "number", "opt": true, "default": 0 }, "ty": { "type": "number", "opt": true, "default": 0 }, "tz": { "type": "number", "opt": true, "default": 0 }
+    } },
+    { "tool": "unity_console_alert", "command": "console_alert", "path": "/console/alert", "description": "Watch the console for log messages matching a substring (case-insensitive) and count them + keep the last few — like watch_alert but for Debug.Log/Warning/Error. Catches errors that scroll away during play. Poll with console_alert_get.", "params": {
+      "pattern": { "type": "string", "desc": "Substring to match in log messages, e.g. 'NullReference' or 'desync'" },
+      "level": { "type": "string", "opt": true, "desc": "all | warning | error (minimum severity to match); default all" }
+    } },
+    { "tool": "unity_console_alert_get", "command": "console_alert_get", "path": "/console/alert-get", "description": "Get console_alert results: each pattern's match count and last matched messages.", "params": {} },
+    { "tool": "unity_console_alert_clear", "command": "console_alert_clear", "path": "/console/alert-clear", "description": "Remove all console_alert patterns.", "params": {} },
     { "tool": "unity_exceptions", "command": "get_exceptions", "path": "/diagnose/exceptions", "description": "Get recent Unity exceptions and errors (rolling buffer of last 50, deduplicated). Sorted by lastSeen desc. Use to quickly surface runtime exceptions without opening the Console window.", "params": {} },
     { "tool": "unity_run_csharp", "command": "run_csharp", "path": "/code/run", "timeoutMs": 60000, "noRetry": true, "description": "Escape hatch — compile and run arbitrary C# against the live Editor/scene via Roslyn. Use ONLY when no dedicated tool fits: build prefabs from imported models, batch-edit assets, drive the AssetDatabase/importer, or prototype gameplay live. Provide a FULL C# source file in 'code'. Put logic in 'public static string Run()' (its return string is reported back), or define a MonoBehaviour (auto-attached to a new GameObject in the playing scene). All loaded assemblies (UnityEngine, UnityEditor, game asm) are referenced automatically. Requires Write ON. Make scripts idempotent — there is no retry, but rerunning should be safe.", "params": {
       "code": { "type": "string", "desc": "Full C# source. Logic in 'public static string Run()' (return value reported) or a MonoBehaviour (auto-attached live)." }

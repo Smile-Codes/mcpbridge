@@ -42,6 +42,7 @@ namespace MCPBridge
             // Apply/Edit Pack — แก้ของจริง (write-gated)
             "/script/edit", "/object/assign-reference", "/batch",
             "/asset/delete", "/asset/import-settings", "/build/player",
+            "/asset/so-edit",   // แก้ค่าใน ScriptableObject asset
             "/tests/run",   // เริ่มรันเทสต์ = action (playmode เข้าจริง) — /tests/results เป็น read-only
             // หมายเหตุ: /watch/add, /watch/clear = READ-ONLY (แค่ sample ค่า field ไม่แก้ scene/game)
             //   → ไม่อยู่ใน WritePaths เพื่อให้ดู runtime value ได้โดยไม่ต้องเปิด Allow Write
@@ -86,6 +87,10 @@ namespace MCPBridge
                 { "watch_alert", "/watch/alert" },              { "watch_animator", "/watch/animator" },
                 { "event_log", "/event/log" },                  { "event_log_get", "/event/log-get" },
                 { "event_log_clear", "/event/log-clear" },
+                { "read_scriptableobject", "/asset/so-read" },  { "edit_scriptableobject", "/asset/so-edit" },
+                { "raycast", "/scene/raycast" },                { "overlap", "/scene/overlap" },
+                { "navmesh_path", "/scene/navmesh-path" },      { "console_alert", "/console/alert" },
+                { "console_alert_get", "/console/alert-get" },  { "console_alert_clear", "/console/alert-clear" },
                 { "get_exceptions", "/diagnose/exceptions" },   { "clear_exceptions", "/diagnose/exceptions-clear" },
                 { "diagnose_exceptions", "/diagnose/exceptions" },
                 { "compile", "/compile" },                      { "compile_status", "/compile-status" },
@@ -306,6 +311,15 @@ namespace MCPBridge
                 "/event/log"     => EventLogAttach(body),
                 "/event/log-get" => ExecuteOnMainThread(() => EventLog.GetReport()),
                 "/event/log-clear" => ExecuteOnMainThread(() => { EventLog.Clear(); return "{\"cleared\":true}"; }),
+                // ── Offline pack ──
+                "/asset/so-read" => ReadScriptableObject(body),
+                "/asset/so-edit" => EditScriptableObject(body),
+                "/scene/raycast" => RaycastQuery(body),
+                "/scene/overlap" => OverlapQuery(body),
+                "/scene/navmesh-path" => NavMeshPath(body),
+                "/console/alert"       => ConsoleAlertAdd(body),
+                "/console/alert-get"   => ExecuteOnMainThread(() => ConsoleAlert.GetReport()),
+                "/console/alert-clear" => ExecuteOnMainThread(() => { ConsoleAlert.Clear(); return "{\"cleared\":true}"; }),
                 "/watch/get"   => ExecuteOnMainThread(() => RuntimeWatch.GetReport()),
                 "/watch/clear" => ExecuteOnMainThread(() => { RuntimeWatch.ClearAll(); return "{\"cleared\":true}"; }),
                 "/code/refactor-audit" => RefactorAuditCmd(body),
