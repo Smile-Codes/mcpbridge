@@ -4,45 +4,18 @@ import { z } from "zod";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { instanceDirs, listInstances, pickInstancePort, preferredProjectRoot } from "./registry.js";
 
 const TIMEOUT_MS  = 8000;   // timeout ต่อ request
 const MAX_RETRIES = 3;       // retry สูงสุด
 const RETRY_DELAY = 600;     // ms ระหว่าง retry
 
-// ── Multi-instance registry: <delta-unity>/Library/DeltaMCP/instances/<pid>.json ──
-// env-independent: คำนวณ root จาก path ของ script เอง (index.js อยู่ <root>/Tools/unity-mcp-server/)
-// → bridge กับ Unity ชี้ที่เดียวกันแน่นอน ไม่ผูก %TEMP%/HOME ที่ Claude Code spawn อาจเห็นคนละตัว
-// (Library ถูก gitignore แล้ว) — Unity clone ตัด _clone_N → ได้ original root เดียวกัน
-const DELTA_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const INSTANCES_DIR = path.join(DELTA_ROOT, "Library", "DeltaMCP", "instances");
 let selectedPort = null;   // target ที่เลือกไว้ (per-session ของ bridge นี้)
 
-function listInstances() {
-  try {
-    if (!fs.existsSync(INSTANCES_DIR)) return [];
-    return fs.readdirSync(INSTANCES_DIR)
-      .filter(f => f.endsWith(".json"))
-      .map(f => {
-        try {
-          // strip UTF-8 BOM (C# Encoding.UTF8 ใส่ BOM นำหน้า → JSON.parse พังถ้าไม่ตัด)
-          let txt = fs.readFileSync(path.join(INSTANCES_DIR, f), "utf8");
-          if (txt.charCodeAt(0) === 0xFEFF) txt = txt.slice(1);
-          return JSON.parse(txt);
-        } catch { return null; }
-      })
-      .filter(Boolean);
-  } catch { return []; }
-}
-
-// เลือก port เป้าหมาย — เฉพาะ instance ที่ serverOn (off คุยไม่ได้)
-// override ผ่าน env > ตัวที่ select ไว้ > "Main" > port ต่ำสุด
+// เลือก port เป้าหมาย — UNITY_MCP_PORT (ตั้งเอง) ชนะทุกอย่าง ที่เหลือดู registry.js
 function resolvePort() {
   if (process.env.UNITY_MCP_PORT) return Number(process.env.UNITY_MCP_PORT);
-  const on = listInstances().filter(i => i.serverOn);
-  if (!on.length) return null;
-  if (selectedPort && on.some(i => i.port === selectedPort)) return selectedPort;
-  const main = on.find(i => String(i.label || "").toLowerCase() === "main");
-  return (main || on.sort((a, b) => a.port - b.port)[0]).port;
+  return pickInstancePort(listInstances(), selectedPort);
 }
 
 // ── Helper: sleep ─────────────────────────────────────────────────────────
@@ -57,7 +30,7 @@ async function callUnity(path_, body = {}, opts = {}) {
   const maxRetries = opts.maxRetries ?? MAX_RETRIES;
   const port = resolvePort();
   if (port == null)
-    return { error: "ไม่พบ Unity instance ที่เปิด MCP server — กด Start ใน Delta AI (ดูด้วย unity_list_instances)" };
+    return { error: "ไม่พบ Unity instance ที่เปิด MCP server — เปิด Unity แล้วกด MCP Bridge → Server → Start (ดูรายการด้วย unity_list_instances)" };
   const base = `http://localhost:${port}`;
 
   let lastErr;
@@ -87,7 +60,7 @@ async function callUnity(path_, body = {}, opts = {}) {
     }
   }
   // หมด retry แล้วยังไม่ได้ → ส่ง error กลับแทน throw (กัน Claude ค้าง)
-  return { error: `Unity MCP Server (port ${port}) ไม่ตอบสนอง (${lastErr?.name ?? "unknown"}) — กด Start ใน Delta AI` };
+  return { error: `Unity MCP Server (port ${port}) ไม่ตอบสนอง (${lastErr?.name ?? "unknown"}) — กด MCP Bridge → Server → Start ใน Unity` };
 }
 
 // ── Command manifest : SINGLE SOURCE (อ่านร่วมกับ Unity C# MCPHandlers.cs) ──
@@ -137,9 +110,14 @@ server.tool("unity_list_instances", "List ALL open Unity Editor instances (Parre
   const active = resolvePort();
   const out = inst
     .sort((a, b) => a.port - b.port)
-    .map(i => ({ label: i.label, project: i.project, port: i.port, serverOn: !!i.serverOn, active: !!i.serverOn && i.port === active }));
+    .map(i => ({ label: i.label, project: i.project, projectPath: i.projectPath, port: i.port, serverOn: !!i.serverOn, active: !!i.serverOn && i.port === active }));
   if (out.length) return { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] };
-  return { content: [{ type: "text", text: JSON.stringify({ instances: [], note: "ไม่มี Unity editor เปิดอยู่ (ที่มี Delta AI)", _debug: { registryDir: INSTANCES_DIR, exists: fs.existsSync(INSTANCES_DIR) } }, null, 2) }] };
+  const searched = instanceDirs().map(d => ({ dir: d, exists: fs.existsSync(d) }));
+  return { content: [{ type: "text", text: JSON.stringify({
+    instances: [],
+    note: "ไม่มี Unity editor ที่ติดตั้ง MCP Bridge เปิดอยู่ (editor เขียน presence ตอนโหลด package)",
+    _debug: { searched, preferredProject: preferredProjectRoot(), cwd: process.cwd() },
+  }, null, 2) }] };
 });
 
 // helper: หา instance จาก label/pid/port

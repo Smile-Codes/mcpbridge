@@ -4,6 +4,30 @@ All notable changes to this package are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **`.mcp.json` no longer gets stamped with a stale path on every domain reload.**
+  `MCPServer.EnsureMcpJson()` hardcoded `./Tools/unity-mcp-server/index.js` (a path from the project
+  this package was extracted from) and rewrote the file whenever its contents differed, so a config
+  edited by hand was clobbered on the next recompile. It now resolves this package's real location
+  through `UnityEditor.PackageManager.PackageInfo.FindForAssembly` and writes the actual path to
+  `Server~/index.js` — project-relative when the package sits inside the Unity project, absolute for a
+  local `file:` reference. The file is only written when it is missing or when it contains nothing but
+  this package's own entry (which is how a stale path is repaired); **a `.mcp.json` with other MCP
+  servers or extra keys is left untouched**, with one Console warning per session if its `unity` entry
+  points at a file that does not exist. Immutable installs (git URL / registry, living in
+  `Library/PackageCache`) are skipped entirely, since that path is read-only and changes on every
+  update. The write also moved to `EditorApplication.delayCall`, so it no longer runs before the
+  Package Manager and AssetDatabase are ready. Both rules — where the path points and which files may
+  be rewritten — are covered by new EditMode tests in `Tests/Editor/McpJsonPathTests.cs`.
+- **The Node bridge finds the Editor for every documented install method.** `Server~/index.js`
+  derived the Unity project root as *two directories above itself* — true only for the original
+  project's `Tools/unity-mcp-server/` layout, so instance discovery resolved to `<project>/Packages/`
+  (embedded) or to a folder outside the project entirely (`file:` reference), and `unity_*` tools
+  reported "no Unity instance" unless `UNITY_MCP_PORT` was set by hand. Every Editor now also
+  registers itself in a machine-wide registry at `~/.mcpbridge/instances/` alongside the existing
+  per-project `Library/DeltaMCP/instances/`, and the bridge merges both by PID. Discovery logic moved
+  to a new `Server~/registry.js` (importable and testable on its own).
+
 ### Added
 - **Offline pack** — tools aimed at single-player/offline work (`Editor/MCPHandlers.Offline.cs`,
   `Editor/ConsoleAlert.cs`):
@@ -34,6 +58,13 @@ All notable changes to this package are documented here.
     badge with trigger count.
 
 ### Changed
+- **Instance selection is project-aware.** With several Editors running, the bridge now prefers one
+  belonging to the current project — `UNITY_PROJECT_PATH`, else the Unity project containing the
+  bridge, else the project containing the client's working directory — before falling back to the old
+  `Main`-then-lowest-port rule; ParrelSync clones still share their original project's registry.
+  Presence entries whose process is gone are ignored instead of being dialled and timing out, and
+  `unity_list_instances` reports `projectPath` plus, when the list is empty, every directory searched.
+
 - **RuntimeWatch is much easier to use.**
   - `watch_add` now only requires `field`. The `component` is auto-detected (the component holding
     that field, game scripts preferred over `UnityEngine.*`), and `objectName` defaults to the

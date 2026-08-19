@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -76,7 +77,8 @@ namespace MCPBridge
 
             // .mcp.json เต็มเสมอ → Node bridge โหลดทุก session → unity_ping เรียกได้ตลอด
             // (gate จริงอยู่ที่ /unity-mcp-open + TcpListener ON/OFF ไม่ใช่ที่ .mcp.json)
-            EnsureMcpJson();
+            // delayCall: ต้องรอให้ PackageManager/AssetDatabase พร้อมก่อน (static ctor เร็วเกินไป)
+            EditorApplication.delayCall += EnsureMcpJson;
 
             if (WasRunning)
                 Start();          // recompile กลางคัน → restore TcpListener อัตโนมัติ
@@ -203,26 +205,57 @@ namespace MCPBridge
             Debug.Log("[MCP] Server stopped");
         }
 
-        // ── Presence registry: ทุก editor (server ON/OFF) เขียนไฟล์ลง shared dir ──
-        // key = PID → <originalRoot>/Library/DeltaMCP/instances/<pid>.json
-        // {pid, label, project, projectPath, port, serverOn} — AI อ่านเพื่อ list/select/start
-        // env-independent: ใช้ Library ของ "original project" (delta-unity)
-        //   clone เป็น sibling ชื่อ <orig>_clone_N → ตัด suffix → ได้ root เดียวกับที่ bridge
-        //   คำนวณจาก path ของ index.js (ไม่ผูก %TEMP%/HOME ที่ Claude Code spawn อาจเห็นคนละตัว)
-        static string InstancesDir()
+        // ── Presence registry: ทุก editor (server ON/OFF) เขียนไฟล์ลง registry dir ──
+        // key = PID → <dir>/<pid>.json = {pid, label, project, projectPath, port, serverOn}
+        // เขียน 2 ที่เสมอ (Node bridge อ่านทั้งคู่แล้ว dedupe ด้วย pid):
+        //   1) per-project <originalRoot>/Library/DeltaMCP/instances — ของเดิม (gitignored)
+        //      clone เป็น sibling ชื่อ <orig>_clone_N → ตัด suffix → Main/Clone ใช้ registry เดียวกัน
+        //   2) shared ทั้งเครื่อง ~/.mcpbridge/instances — จำเป็นเพราะ Node ไม่มี PackageManager API:
+        //      ถ้าติดตั้งแบบ local "file:" ref ตัว index.js อยู่นอก Unity project → คำนวณ project root
+        //      จาก path ของตัวเองไม่ได้เลย. home dir เป็นจุดเดียวที่ทั้ง C# และ Node คำนวณตรงกันเสมอ
+        static string ProjectInstancesDir()
         {
-            string projRoot = Directory.GetParent(Application.dataPath).FullName;   // .../delta-unity[_clone_N]
+            string projRoot = Directory.GetParent(Application.dataPath).FullName;   // .../<project>[_clone_N]
             string parent   = Directory.GetParent(projRoot).FullName;              // parent ร่วม
             string name     = Path.GetFileName(projRoot);
             var m = System.Text.RegularExpressions.Regex.Match(name, @"^(.*)_clone_\d+$");
             string origRoot = m.Success ? Path.Combine(parent, m.Groups[1].Value) : projRoot;
-            string dir = Path.Combine(origRoot, "Library", "DeltaMCP", "instances");
-            Directory.CreateDirectory(dir);
-            return dir;
+            return CreateDirOrEmpty(Path.Combine(origRoot, "Library", "DeltaMCP", "instances"));
+        }
+
+        static string SharedInstancesDir()
+        {
+            string home = HomeDir();
+            return string.IsNullOrEmpty(home) ? "" : CreateDirOrEmpty(Path.Combine(home, ".mcpbridge", "instances"));
+        }
+
+        // ตรงกับ os.homedir() ฝั่ง Node (Windows: USERPROFILE, macOS/Linux: HOME)
+        static string HomeDir()
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrEmpty(home)) home = Environment.GetEnvironmentVariable("USERPROFILE");
+            if (string.IsNullOrEmpty(home)) home = Environment.GetEnvironmentVariable("HOME");
+            return home ?? "";
+        }
+
+        static string CreateDirOrEmpty(string dir)
+        {
+            try { Directory.CreateDirectory(dir); return dir; }
+            catch (Exception e) { Debug.LogWarning($"[MCP] สร้าง registry dir ไม่ได้: {dir} ({e.Message})"); return ""; }
+        }
+
+        static List<string> InstancesDirs()
+        {
+            var dirs = new List<string>(2);
+            string project = ProjectInstancesDir();
+            if (!string.IsNullOrEmpty(project)) dirs.Add(project);
+            string shared = SharedInstancesDir();
+            if (!string.IsNullOrEmpty(shared)) dirs.Add(shared);
+            return dirs;
         }
 
         static int Pid => System.Diagnostics.Process.GetCurrentProcess().Id;
-        static string PresencePath() => Path.Combine(InstancesDir(), $"{Pid}.json");
+        static string PresenceFileName => $"{Pid}.json";
 
         // เขียน presence ของ editor นี้ — serverOn:true → port จริง, false → preferred port
         static void WritePresence(bool serverOn)
@@ -236,35 +269,50 @@ namespace MCPBridge
                 string json = $"{{\"pid\":{Pid},\"label\":\"{Escape(Label)}\",\"project\":\"{Escape(proj)}\","
                             + $"\"projectPath\":\"{Escape(projPath.Replace("\\", "/"))}\",\"port\":{port},"
                             + $"\"serverOn\":{(serverOn ? "true" : "false")}}}";
-                // UTF8 ไม่ใส่ BOM — ไม่งั้น Node JSON.parse พัง (Encoding.UTF8 ใส่ BOM นำหน้า)
-                File.WriteAllText(PresencePath(), json, new System.Text.UTF8Encoding(false));
+                foreach (var dir in InstancesDirs())
+                {
+                    // UTF8 ไม่ใส่ BOM — ไม่งั้น Node JSON.parse พัง (Encoding.UTF8 ใส่ BOM นำหน้า)
+                    try { File.WriteAllText(Path.Combine(dir, PresenceFileName), json, new System.Text.UTF8Encoding(false)); }
+                    catch (Exception e) { Debug.LogWarning($"[MCP] WritePresence ลง {dir} ไม่สำเร็จ: {e.Message}"); }
+                }
             }
             catch (Exception e) { Debug.LogWarning($"[MCP] WritePresence failed: {e.Message}"); }
         }
 
         static void RemovePresence()
         {
-            try { File.Delete(PresencePath()); } catch { }
+            foreach (var dir in InstancesDirs())
+            {
+                try { File.Delete(Path.Combine(dir, PresenceFileName)); }
+                catch (Exception e) { Debug.LogWarning($"[MCP] ถอน presence จาก {dir} ไม่สำเร็จ: {e.Message}"); }
+            }
         }
 
         // ลบ entry ที่ process ตายแล้ว (editor crash ไม่ได้ถอน presence)
+        // shared registry สะสม entry ของทุกโปรเจกต์ในเครื่อง → editor ตัวไหนก็ได้ที่ทำงานอยู่ช่วยกวาดให้
         static void SweepRegistry()
+        {
+            foreach (var dir in InstancesDirs())
+            {
+                try
+                {
+                    foreach (var f in Directory.GetFiles(dir, "*.json"))
+                        DeleteIfProcessDead(f);
+                }
+                catch (Exception e) { Debug.LogWarning($"[MCP] SweepRegistry ที่ {dir} ล้มเหลว: {e.Message}"); }
+            }
+        }
+
+        static void DeleteIfProcessDead(string presenceFile)
         {
             try
             {
-                foreach (var f in Directory.GetFiles(InstancesDir(), "*.json"))
-                {
-                    try
-                    {
-                        var m = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(f), "\"pid\"\\s*:\\s*(\\d+)");
-                        if (!m.Success) continue;
-                        try { System.Diagnostics.Process.GetProcessById(int.Parse(m.Groups[1].Value)); }  // ตาย → throw
-                        catch { File.Delete(f); }
-                    }
-                    catch { }
-                }
+                var m = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(presenceFile), "\"pid\"\\s*:\\s*(\\d+)");
+                if (!m.Success) return;
+                try { System.Diagnostics.Process.GetProcessById(int.Parse(m.Groups[1].Value)); }  // ตาย → throw
+                catch { File.Delete(presenceFile); }
             }
-            catch { }
+            catch (Exception e) { Debug.LogWarning($"[MCP] อ่าน/ลบ presence {presenceFile} ไม่ได้: {e.Message}"); }
         }
 
         // ── Watcher: เฝ้า trigger file รอ AI สั่งเปิด (เฉพาะตอน server OFF) ──────
@@ -321,22 +369,132 @@ namespace MCPBridge
             catch (Exception e) { Debug.LogWarning($"[MCP] watch error: {e.Message}"); }
         }
 
-        // ── .mcp.json — เขียน config เต็มถ้ายังไม่มี/ไม่ตรง ───────────────────
-        // เต็มเสมอ → Node bridge โหลดทุก session → unity_ping เรียกได้ตลอด
-        // (server ON/OFF จริงอยู่ที่ TcpListener ไม่ใช่ที่ไฟล์นี้)
+        // ── .mcp.json — ให้ project root มี config ที่ชี้ไปที่ Server~/index.js ของ package นี้จริง ──
+        // path คำนวณจาก PackageManager (resolvedPath) → ถูกทั้ง embedded package และ local "file:" ref
+        // ไฟล์ที่ผู้ใช้แก้เอง (มี server ตัวอื่น/คีย์อื่น) จะไม่ถูกเขียนทับ — เตือนอย่างเดียว
         static void EnsureMcpJson()
         {
             try
             {
-                string projectRoot = Path.Combine(Application.dataPath, "..");
+                // git URL / registry install: Server~ ไปอยู่ใน Library/PackageCache ซึ่งอ่านอย่างเดียว
+                // และเปลี่ยน path ทุกครั้งที่ update → ไม่แตะ .mcp.json เลย ปล่อยให้ผู้ใช้ชี้ไป clone ของตัวเอง
+                if (IsImmutablePackageInstall()) return;
+
+                string serverEntry = ServerEntryPath();
+                if (string.IsNullOrEmpty(serverEntry) || !File.Exists(serverEntry))
+                {
+                    Debug.LogWarning($"[MCP] หา Server~/index.js ของ package ไม่เจอ — ข้ามการเขียน .mcp.json (ลองแล้ว: '{serverEntry}')");
+                    return;
+                }
+
+                string projectRoot = ProjectRoot();
                 string mcpPath     = Path.Combine(projectRoot, ".mcp.json");
-                const string full  = "{\n  \"mcpServers\": {\n    \"unity\": {\n      \"command\": \"node\",\n      \"args\": [\"./Tools/unity-mcp-server/index.js\"]\n    }\n  }\n}\n";
-                // เขียนเฉพาะถ้าไฟล์ไม่มี หรือ content ไม่ตรง (กัน write ซ้ำทุก domain reload)
-                if (!File.Exists(mcpPath) || File.ReadAllText(mcpPath).Trim() != full.Trim())
-                    File.WriteAllText(mcpPath, full, new System.Text.UTF8Encoding(false));
+                string argsPath    = McpArgsPath(serverEntry, projectRoot);
+                string generated   = GeneratedMcpJson(argsPath);
+
+                if (!File.Exists(mcpPath)) { WriteTextNoBom(mcpPath, generated); return; }
+
+                string existing = File.ReadAllText(mcpPath);
+                if (IsGeneratedByThisPackage(existing))
+                {
+                    if (existing.Trim() != generated.Trim()) WriteTextNoBom(mcpPath, generated);   // path เก่า/ย้ายที่ → ซ่อมให้
+                    return;
+                }
+                WarnIfUnityEntryPathIsBroken(existing, projectRoot, argsPath, mcpPath);
             }
             catch (Exception e) { Debug.LogWarning($"[MCP] EnsureMcpJson failed: {e.Message}"); }
         }
+
+        static string ProjectRoot() => Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+        static UnityEditor.PackageManager.PackageInfo ThisPackage() =>
+            UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(MCPServer).Assembly);
+
+        // แก้ไขไม่ได้ = ติดตั้งจาก git URL / registry (อยู่ใน Library/PackageCache)
+        // null = ไม่ได้ติดตั้งเป็น package (โค้ดวางใน Assets/ ตรงๆ) → แก้ไขได้
+        static bool IsImmutablePackageInstall()
+        {
+            var info = ThisPackage();
+            return info != null
+                && info.source != UnityEditor.PackageManager.PackageSource.Local
+                && info.source != UnityEditor.PackageManager.PackageSource.Embedded;
+        }
+
+        // path จริงบนดิสก์ของ package นี้ — resolvedPath ครอบคลุมทั้ง embedded (<project>/Packages/...)
+        // และ local "file:" ref (โฟลเดอร์ต้นทางนอก project ซึ่งคำนวณจาก path ของ project ไม่ได้)
+        static string PackageRootPath()
+        {
+            var info = ThisPackage();
+            if (info != null && !string.IsNullOrEmpty(info.resolvedPath) && Directory.Exists(info.resolvedPath))
+                return info.resolvedPath;
+            return PackageRootFromAsmdef();
+        }
+
+        // fallback: ไม่ได้ติดตั้งเป็น package (โค้ดถูกวางใน Assets/ ตรงๆ) → หาจากที่อยู่ของ asmdef
+        static string PackageRootFromAsmdef()
+        {
+            const string asmdefName = "UnityMCP.Editor";
+            foreach (var guid in AssetDatabase.FindAssets($"{asmdefName} t:AssemblyDefinitionAsset"))
+            {
+                string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+                if (!assetPath.EndsWith($"/{asmdefName}.asmdef", StringComparison.Ordinal)) continue;
+                string editorDir = Directory.GetParent(Path.GetFullPath(assetPath))?.FullName;
+                string root = string.IsNullOrEmpty(editorDir) ? "" : Directory.GetParent(editorDir)?.FullName;
+                if (!string.IsNullOrEmpty(root)) return root;
+            }
+            return "";
+        }
+
+        static string ServerEntryPath()
+        {
+            string root = PackageRootPath();
+            return string.IsNullOrEmpty(root) ? "" : Path.Combine(root, "Server~", "index.js");
+        }
+
+        // อยู่ใน project → path สัมพัทธ์ (commit ร่วมกับทีมได้) · อยู่นอก project → absolute
+        internal static string McpArgsPath(string serverEntry, string projectRoot)
+        {
+            string entry = ToForwardSlashes(Path.GetFullPath(serverEntry));
+            string root  = ToForwardSlashes(Path.GetFullPath(projectRoot)).TrimEnd('/');
+            return entry.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
+                ? "./" + entry.Substring(root.Length + 1)
+                : entry;
+        }
+
+        static string ToForwardSlashes(string path) => path.Replace("\\", "/");
+
+        internal static string GeneratedMcpJson(string argsPath) =>
+            "{\n  \"mcpServers\": {\n    \"unity\": {\n      \"command\": \"node\",\n      \"args\": [\""
+            + argsPath.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"]\n    }\n  }\n}\n";
+
+        // ไฟล์ที่ "เราเป็นคนเขียนเอง" = มีแค่ mcpServers.unity ที่รัน node กับ args เส้นเดียว
+        // เข้าเงื่อนไขนี้เท่านั้นถึงจะเขียนทับได้ — ไฟล์ที่ผู้ใช้เติม server อื่นเข้าไปจะไม่ตรง pattern
+        internal static bool IsGeneratedByThisPackage(string json) =>
+            System.Text.RegularExpressions.Regex.IsMatch(json,
+                "^\\s*\\{\\s*\"mcpServers\"\\s*:\\s*\\{\\s*\"unity\"\\s*:\\s*\\{\\s*\"command\"\\s*:\\s*\"node\"\\s*,"
+                + "\\s*\"args\"\\s*:\\s*\\[\\s*\"[^\"]*\"\\s*\\]\\s*\\}\\s*\\}\\s*\\}\\s*$");
+
+        const string WARNED_MCP_JSON_KEY = "DeltaMCP_WarnedMcpJson";
+
+        // ไฟล์ของผู้ใช้: ถ้ามี entry "unity" แต่ path ที่ชี้ไม่มีอยู่จริง → เตือนครั้งเดียวต่อ session
+        // ไม่มี entry "unity" เลย = ผู้ใช้ลงทะเบียน server ไว้ที่อื่น (claude mcp add) → เงียบไว้
+        static void WarnIfUnityEntryPathIsBroken(string json, string projectRoot, string correctArgs, string mcpPath)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(json, "\"unity\"\\s*:\\s*\\{[\\s\\S]*?\"args\"\\s*:\\s*\\[\\s*\"([^\"]+)\"");
+            if (!m.Success) return;
+
+            string configured = m.Groups[1].Value;
+            string full = Path.IsPathRooted(configured) ? configured : Path.Combine(projectRoot, configured);
+            if (File.Exists(full)) return;
+            if (SessionState.GetBool(WARNED_MCP_JSON_KEY, false)) return;
+
+            SessionState.SetBool(WARNED_MCP_JSON_KEY, true);
+            Debug.LogWarning($"[MCP] {mcpPath} ชี้ไปที่ '{configured}' ซึ่งไม่มีอยู่จริง — แก้ args เป็น \"{correctArgs}\" "
+                           + "(ไฟล์นี้มีการแก้ไขเองจึงไม่ถูกเขียนทับให้)");
+        }
+
+        static void WriteTextNoBom(string path, string text) =>
+            File.WriteAllText(path, text, new System.Text.UTF8Encoding(false));
 
         static void Listen()
         {
